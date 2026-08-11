@@ -52,6 +52,40 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .auth-switch a { margin-left: 0.35rem; color: var(--accent); font-weight: 650; text-decoration: none; }
 .auth-switch a:hover { color: var(--accent-strong); text-decoration: underline; }
 
+.home-hero { position: relative; isolation: isolate; min-height: 100vh; overflow: hidden; background: #12251f; color: white; }
+.home-backgrounds, .home-background-layer, .home-scrim, .home-bubble-field { position: absolute; inset: 0; }
+.home-backgrounds { z-index: -2; }
+.home-background-layer { opacity: 0; background-position: center; background-repeat: no-repeat; background-size: cover; transform: scale(1.08) translateX(2%); transition: opacity 1400ms ease; }
+.home-background-layer.is-active { opacity: 1; animation: home-background-pan 9s linear both; }
+.home-scrim { z-index: -1; background: rgba(7, 19, 16, 0.48); }
+.home-nav { position: relative; z-index: 3; display: flex; justify-content: flex-end; padding: 1.5rem 2rem; }
+.home-guest-actions, .home-user-actions { display: flex; align-items: center; gap: 0.7rem; }
+.home-register, .home-login, .home-logout { display: inline-flex; min-height: 2.35rem; align-items: center; justify-content: center; border-radius: 5px; padding: 0 1rem; font-size: 0.88rem; font-weight: 650; text-decoration: none; transition: background-color 150ms ease, color 150ms ease, transform 150ms ease; }
+.home-register { border: 1px solid rgba(255, 255, 255, 0.85); background: rgba(255, 255, 255, 0.96); color: #1b3028; }
+.home-register:hover { background: white; transform: translateY(-1px); }
+.home-login { background: #397fd7; color: white; box-shadow: 0 6px 16px rgba(9, 28, 57, 0.25); }
+.home-login:hover { background: #286bbf; transform: translateY(-1px); }
+.home-username { padding: 0.45rem 0.75rem; border: 1px solid rgba(255, 255, 255, 0.32); border-radius: 5px; background: rgba(16, 37, 30, 0.43); color: white; font-size: 0.85rem; }
+.home-logout { width: 2.35rem; border: 1px solid rgba(255, 255, 255, 0.4); background: rgba(16, 37, 30, 0.38); padding: 0; color: white; }
+.home-logout:hover { background: rgba(255, 255, 255, 0.18); transform: translateY(-1px); }
+.home-bubble-field { z-index: 1; overflow: hidden; pointer-events: none; }
+.home-bubble-float { position: absolute; animation-name: home-bubble-float; animation-timing-function: ease-in-out; animation-iteration-count: infinite; }
+.home-bubble { display: block; border: 1px solid rgba(255, 255, 255, 0.24); border-radius: 999px; background: rgba(13, 38, 30, 0.33); box-shadow: 0 12px 28px rgba(4, 16, 12, 0.15); color: rgba(255, 255, 255, 0.92); padding: 0.48rem 0.9rem; font-size: 0.82rem; line-height: 1; transform: translate(var(--repel-x), var(--repel-y)); transition: transform 220ms ease-out, background-color 220ms ease-out; backdrop-filter: blur(7px); }
+.home-stage { position: relative; z-index: 2; display: grid; min-height: calc(100vh - 5.35rem); align-content: start; justify-items: center; padding: 23vh 1.5rem 5rem; text-align: center; }
+.home-stage h1 { margin: 0; color: white; font-size: 4.2rem; font-weight: 700; line-height: 1.1; text-shadow: 0 5px 22px rgba(5, 20, 15, 0.42); }
+.home-launch { display: inline-flex; min-height: 3.2rem; align-items: center; justify-content: center; margin-top: 2rem; border: 1px solid rgba(255, 255, 255, 0.7); border-radius: 6px; background: rgba(20, 89, 70, 0.94); box-shadow: 0 10px 28px rgba(4, 18, 13, 0.32); color: white; padding: 0 1.35rem; font-size: 1rem; font-weight: 700; text-decoration: none; transition: background-color 160ms ease, transform 160ms ease, box-shadow 160ms ease; }
+.home-launch:hover { background: #17745d; box-shadow: 0 14px 32px rgba(4, 18, 13, 0.42); transform: translateY(-2px); }
+
+@keyframes home-background-pan {
+  from { transform: scale(1.08) translateX(2%); }
+  to { transform: scale(1.12) translateX(-3%); }
+}
+
+@keyframes home-bubble-float {
+  0%, 100% { margin-top: 0; }
+  50% { margin-top: -1.2rem; }
+}
+
 .chat-app { background: transparent; }
 .chat-sidebar { border-color: #30463c; background: var(--sidebar); color: var(--ink-inverse); }
 .sidebar-header { height: 4.5rem; border-color: #30463c; padding: 0 1rem; }
@@ -146,6 +180,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .auth-page { grid-template-rows: minmax(10.5rem, 24vh) auto 1fr; }
   .auth-heading { padding-bottom: 2rem; }
   .auth-heading h1 { font-size: 2.6rem; }
+  .home-nav { padding: 1rem; }
+  .home-stage { min-height: calc(100vh - 4.4rem); padding-top: 27vh; }
+  .home-stage h1 { font-size: 2.55rem; }
+  .home-bubble:nth-child(n+8) { display: none; }
   .appearance-control { right: 1rem; bottom: 1rem; }
   .appearance-panel { width: min(17.5rem, calc(100vw - 2rem)); }
   .chat-sidebar { width: 4.1rem !important; }
@@ -159,6 +197,12 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .model-select { min-width: 0; width: 9rem; }
   .message-stream { padding: 1.5rem 1rem 2rem; }
   .message-body { max-width: calc(100% - 2.75rem); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-background-layer { transition: none; transform: none; }
+  .home-background-layer.is-active, .home-bubble-float { animation: none; }
+  .home-bubble, .home-launch, .home-register, .home-login, .home-logout { transition: none; }
 }
 
 .markdown p { margin: 0 0 0.75rem; }

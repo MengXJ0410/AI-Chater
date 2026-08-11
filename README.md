@@ -37,6 +37,10 @@ ANTHROPIC_API_KEY=your-anthropic-key
 
 支持的 `provider`：`openai`、`openai-compatible`、`xai`、`anthropic`、`google`。图片只能发送给 `supportsImages: true` 的预设。
 
+## 首页背景
+
+将 JPG、JPEG、PNG、WebP 或 AVIF 图片放入 `public/home-backgrounds`。首页会在下一次访问时按文件名顺序轮播这些图片；目录为空时使用纯色背景。
+
 ## 命令
 
 ```powershell
