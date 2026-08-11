@@ -1,0 +1,47 @@
+{
+  "name": "ai-chater",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.37",
+    "@ai-sdk/google": "^4.0.41",
+    "@ai-sdk/openai": "^4.0.37",
+    "@ai-sdk/openai-compatible": "^3.0.29",
+    "@ai-sdk/xai": "^4.0.34",
+    "ai": "^7.0.59",
+    "argon2": "^0.44.0",
+    "drizzle-orm": "^0.45.2",
+    "lucide-react": "^0.563.0",
+    "mysql2": "^3.14.4",
+    "next": "^16.3.0",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1",
+    "react-markdown": "^10.1.0",
+    "rehype-sanitize": "^6.0.0",
+    "remark-gfm": "^4.0.1",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.1",
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "drizzle-kit": "^0.31.8",
+    "eslint": "^9.39.1",
+    "eslint-config-next": "^16.3.0",
+    "tailwindcss": "^4.1.14",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.8"
+  }
+}

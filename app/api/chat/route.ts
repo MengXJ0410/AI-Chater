@@ -1,0 +1,97 @@
+import { randomUUID } from "crypto";
+import { and, eq, inArray, isNull } from "drizzle-orm";
+import { streamText } from "ai";
+import { getLanguageModel, getPreset, toModelMessages } from "@/lib/ai";
+import { requireUser } from "@/lib/auth";
+import { routeError } from "@/lib/api";
+import { getDb } from "@/lib/db";
+import { attachments, conversations, messages } from "@/lib/db/schema";
+import { assertSameOrigin, errorResponse } from "@/lib/http";
+import { chatSchema } from "@/lib/validators";
+
+export const runtime = "nodejs";
+
+export async function POST(request: Request) {
+  try {
+    assertSameOrigin(request);
+    const user = await requireUser();
+    const { conversationId, presetId, text, attachmentIds } = chatSchema.parse(await request.json());
+    const conversation = await getDb().select().from(conversations)
+      .where(and(eq(conversations.id, conversationId), eq(conversations.userId, user.id))).limit(1);
+    if (!conversation[0]) return errorResponse("会话不存在。", 404);
+
+    const preset = getPreset(presetId);
+    if (!preset) return errorResponse("所选模型预设不存在。", 404);
+    if (attachmentIds.length && !preset.supportsImages) return errorResponse("当前模型不支持图片输入。");
+
+    const uniqueAttachmentIds = [...new Set(attachmentIds)];
+    const selectedAttachments = uniqueAttachmentIds.length
+      ? await getDb().select().from(attachments).where(and(
+        eq(attachments.userId, user.id),
+        isNull(attachments.messageId),
+        inArray(attachments.id, uniqueAttachmentIds),
+      ))
+      : [];
+    if (selectedAttachments.length !== uniqueAttachmentIds.length) return errorResponse("存在无效或已使用的图片附件。", 400);
+
+    const userMessageId = randomUUID();
+    const parts = [
+      ...(text ? [{ type: "text" as const, text }] : []),
+      ...uniqueAttachmentIds.map((attachmentId) => ({ type: "image" as const, attachmentId })),
+    ];
+
+    await getDb().transaction(async (tx) => {
+      await tx.insert(messages).values({
+        id: userMessageId,
+        conversationId,
+        role: "user",
+        parts,
+      });
+      if (uniqueAttachmentIds.length) {
+        await tx.update(attachments).set({ messageId: userMessageId }).where(inArray(attachments.id, uniqueAttachmentIds));
+      }
+      if (conversation[0].title === "新对话" && text) {
+        await tx.update(conversations).set({ title: text.slice(0, 40) }).where(eq(conversations.id, conversationId));
+      } else {
+        await tx.update(conversations).set({ updatedAt: new Date() }).where(eq(conversations.id, conversationId));
+      }
+    });
+
+    const history = await getDb().select().from(messages)
+      .where(eq(messages.conversationId, conversationId));
+    const historyMessageIds = history.map((message) => message.id);
+    const historyAttachments = historyMessageIds.length
+      ? await getDb().select().from(attachments).where(inArray(attachments.messageId, historyMessageIds))
+      : [];
+    const storageKeys = new Map(historyAttachments.map((attachment) => [attachment.id, attachment.storageKey]));
+    const mimeTypes = new Map(historyAttachments.map((attachment) => [attachment.id, attachment.mimeType]));
+    const modelMessages = await toModelMessages(history.map((message) => ({
+      role: message.role,
+      parts: message.parts,
+      storageKeys,
+      mimeTypes,
+    })));
+
+    const result = streamText({
+      model: getLanguageModel(preset),
+      messages: modelMessages,
+      abortSignal: request.signal,
+      onFinish: async ({ text: assistantText }) => {
+        if (!assistantText.trim()) return;
+        await getDb().insert(messages).values({
+          id: randomUUID(),
+          conversationId,
+          role: "assistant",
+          parts: [{ type: "text", text: assistantText }],
+          presetId: preset.id,
+          model: preset.model,
+        });
+        await getDb().update(conversations).set({ updatedAt: new Date() }).where(eq(conversations.id, conversationId));
+      },
+    });
+
+    return result.toTextStreamResponse();
+  } catch (error) {
+    return routeError(error);
+  }
+}
