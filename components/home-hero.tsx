@@ -2,64 +2,137 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CSSProperties, PointerEvent, useEffect, useState } from "react";
+import { CSSProperties, useEffect, useRef, useState } from "react";
 import { LogOut } from "lucide-react";
 import { pickAiTerms } from "@/lib/ai-terms";
+import {
+  APPEARANCE_CHANGE_EVENT,
+  DEFAULT_ACCENT,
+  defaultAppearance,
+  deriveBubbleColor,
+  type AppearanceChangeDetail,
+} from "@/lib/appearance";
+import {
+  advanceParticles,
+  createBubbleVisuals,
+  placeBubbleParticles,
+  type BubbleParticle,
+  type BubbleRect,
+  type BubbleVisual,
+} from "@/lib/home-bubbles";
 
 type HomeUser = { id: string; username: string } | null;
 
-type Bubble = {
-  id: string;
-  term: string;
-  x: number;
-  y: number;
-  delay: number;
-  duration: number;
-};
-
 type PointerPosition = { x: number; y: number } | null;
-
-function createBubbles() {
-  return pickAiTerms(10).map((term, index) => {
-    let x = 0;
-    let y = 0;
-    do {
-      x = 7 + Math.random() * 86;
-      y = 10 + Math.random() * 80;
-    } while (x > 27 && x < 73 && y > 24 && y < 76);
-
-    return {
-      id: `${term}-${index}`,
-      term,
-      x,
-      y,
-      delay: -Math.random() * 9,
-      duration: 7 + Math.random() * 5,
-    };
-  });
-}
-
-function bubbleRepulsion(bubble: Bubble, pointer: PointerPosition) {
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return { x: 0, y: 0 };
-  if (!pointer) return { x: 0, y: 0 };
-  const x = bubble.x - pointer.x;
-  const y = bubble.y - pointer.y;
-  const distance = Math.hypot(x, y);
-  const radius = 17;
-  if (distance === 0 || distance >= radius) return { x: 0, y: 0 };
-  const force = ((radius - distance) / radius) * 42;
-  return { x: (x / distance) * force, y: (y / distance) * force };
-}
 
 export function HomeHero({ backgrounds, user }: { backgrounds: string[]; user: HomeUser }) {
   const router = useRouter();
   const [activeBackground, setActiveBackground] = useState(0);
-  const [bubbles, setBubbles] = useState<Bubble[]>([]);
-  const [pointer, setPointer] = useState<PointerPosition>(null);
+  const [bubbles, setBubbles] = useState<BubbleVisual[]>([]);
+  const [accent, setAccent] = useState(DEFAULT_ACCENT);
+  const [bubbleColorRange, setBubbleColorRange] = useState(defaultAppearance.bubbleColorRange);
+  const activityRef = useRef(defaultAppearance.bubbleActivity);
+  const fieldRef = useRef<HTMLDivElement>(null);
+  const stageContentRef = useRef<HTMLDivElement>(null);
+  const bubbleElementsRef = useRef(new Map<string, HTMLDivElement>());
+  const particlesRef = useRef<BubbleParticle[]>([]);
+  const pointerRef = useRef<PointerPosition>(null);
 
   useEffect(() => {
-    void Promise.resolve().then(() => setBubbles(createBubbles()));
+    void Promise.resolve().then(() => setBubbles(createBubbleVisuals(pickAiTerms(6))));
   }, []);
+
+  useEffect(() => {
+    const updateAccent = (event: Event) => {
+      const detail = (event as CustomEvent<AppearanceChangeDetail>).detail;
+      setAccent(detail.accent);
+      setBubbleColorRange(detail.bubbleColorRange);
+      activityRef.current = detail.bubbleActivity;
+    };
+    window.addEventListener(APPEARANCE_CHANGE_EVENT, updateAccent);
+    return () => window.removeEventListener(APPEARANCE_CHANGE_EVENT, updateAccent);
+  }, []);
+
+  useEffect(() => {
+    const field = fieldRef.current;
+    const stageContent = stageContentRef.current;
+    if (!field || !stageContent || bubbles.length === 0) return;
+
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let frame = 0;
+    let previousTime = performance.now();
+    let bounds = { width: field.clientWidth, height: field.clientHeight, padding: 12 };
+    let safeRect: BubbleRect = { left: 0, top: 0, right: 0, bottom: 0 };
+
+    function measureAndPlace() {
+      const fieldBounds = field!.getBoundingClientRect();
+      const contentBounds = stageContent!.getBoundingClientRect();
+      bounds = { width: fieldBounds.width, height: fieldBounds.height, padding: fieldBounds.width <= 700 ? 8 : 14 };
+      safeRect = {
+        left: contentBounds.left - fieldBounds.left - 34,
+        top: contentBounds.top - fieldBounds.top - 28,
+        right: contentBounds.right - fieldBounds.left + 34,
+        bottom: contentBounds.bottom - fieldBounds.top + 34,
+      };
+      particlesRef.current = placeBubbleParticles(bubbles, bounds, safeRect);
+      drawParticles();
+    }
+
+    function drawParticles() {
+      for (const particle of particlesRef.current) {
+        const element = bubbleElementsRef.current.get(particle.id);
+        if (!element) continue;
+        const pointer = pointerRef.current;
+        const pointerDistance = pointer ? Math.hypot(particle.x - pointer.x, particle.y - pointer.y) : Number.POSITIVE_INFINITY;
+        const proximity = Math.max(0, 1 - pointerDistance / (particle.radius + 125));
+        const activity = activityRef.current / 100;
+        element.style.setProperty("--bubble-x", `${particle.x}px`);
+        element.style.setProperty("--bubble-y", `${particle.y}px`);
+        element.style.setProperty("--bubble-size", `${particle.size}px`);
+        element.style.setProperty("--squash-x", String(1 - particle.squash * activity));
+        element.style.setProperty("--squash-y", String(1 + particle.squash * activity * 0.72));
+        element.style.setProperty("--squash-angle", `${particle.squashAngle}rad`);
+        element.style.setProperty("--pointer-scale", String(1 + proximity * activity * 0.05));
+        element.style.setProperty("--pointer-light", String(proximity * activity));
+        element.style.setProperty("--bubble-ready", "1");
+      }
+    }
+
+    function animate(time: number) {
+      const elapsed = (time - previousTime) / 1000;
+      previousTime = time;
+      if (!document.hidden) {
+        const activity = activityRef.current / 100;
+        const pointer = pointerRef.current;
+        if (pointer && activity > 0) {
+          for (const particle of particlesRef.current) {
+            const dx = particle.x - pointer.x;
+            const dy = particle.y - pointer.y;
+            const distance = Math.hypot(dx, dy);
+            const influence = particle.radius + 112;
+            if (distance > 0 && distance < influence) {
+              const force = (1 - distance / influence) * (20 + 34 * activity) * Math.min(elapsed, 0.05);
+              particle.vx += (dx / distance) * force;
+              particle.vy += (dy / distance) * force;
+            }
+          }
+        }
+        if (activity > 0) advanceParticles(particlesRef.current, elapsed * (0.45 + activity * 1.1), bounds, safeRect);
+        drawParticles();
+      }
+      frame = window.requestAnimationFrame(animate);
+    }
+
+    const resizeObserver = new ResizeObserver(measureAndPlace);
+    resizeObserver.observe(field);
+    resizeObserver.observe(stageContent);
+    measureAndPlace();
+    if (!reducedMotion.matches) frame = window.requestAnimationFrame(animate);
+    return () => {
+      resizeObserver.disconnect();
+      window.cancelAnimationFrame(frame);
+    };
+  }, [bubbles]);
 
   useEffect(() => {
     if (backgrounds.length < 2) return;
@@ -69,13 +142,11 @@ export function HomeHero({ backgrounds, user }: { backgrounds: string[]; user: H
     return () => window.clearInterval(interval);
   }, [backgrounds.length]);
 
-  function movePointer(event: PointerEvent<HTMLElement>) {
+  function movePointer(event: React.PointerEvent<HTMLElement>) {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const bounds = event.currentTarget.getBoundingClientRect();
-    setPointer({
-      x: ((event.clientX - bounds.left) / bounds.width) * 100,
-      y: ((event.clientY - bounds.top) / bounds.height) * 100,
-    });
+    const bounds = fieldRef.current?.getBoundingClientRect();
+    if (!bounds) return;
+    pointerRef.current = { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
   }
 
   async function logout() {
@@ -84,7 +155,7 @@ export function HomeHero({ backgrounds, user }: { backgrounds: string[]; user: H
   }
 
   return (
-    <main className="home-hero" onPointerMove={movePointer} onPointerLeave={() => setPointer(null)}>
+    <main className="home-hero" onPointerMove={movePointer} onPointerLeave={() => { pointerRef.current = null; }}>
       <div className="home-backgrounds" aria-hidden="true">
         {backgrounds.map((background, index) => <div className={`home-background-layer ${index === activeBackground ? "is-active" : ""}`} style={{ backgroundImage: `url(${background})` }} key={background} />)}
       </div>
@@ -102,23 +173,26 @@ export function HomeHero({ backgrounds, user }: { backgrounds: string[]; user: H
           </nav>
         )}
       </header>
-      <div className="home-bubble-field" aria-hidden="true">
+      <div className="home-bubble-field" ref={fieldRef} aria-hidden="true">
         {bubbles.map((bubble) => {
-          const repel = bubbleRepulsion(bubble, pointer);
+          const color = deriveBubbleColor(accent, bubble, bubbleColorRange);
           const style = {
-            left: `${bubble.x}%`,
-            top: `${bubble.y}%`,
-            animationDelay: `${bubble.delay}s`,
-            animationDuration: `${bubble.duration}s`,
-            "--repel-x": `${repel.x}px`,
-            "--repel-y": `${repel.y}px`,
+            "--bubble-size": `${bubble.size}px`,
+            "--bubble-gradient": `linear-gradient(${bubble.gradientAngle}deg, color-mix(in srgb, ${color.primary} 68%, transparent), color-mix(in srgb, ${color.secondary} 62%, transparent))`,
+            "--bubble-text": color.text,
           } as CSSProperties;
-          return <div className="home-bubble-float" style={style} key={bubble.id}><span className="home-bubble">{bubble.term}</span></div>;
+          return (
+            <div className="home-bubble-float" ref={(element) => { if (element) bubbleElementsRef.current.set(bubble.id, element); else bubbleElementsRef.current.delete(bubble.id); }} style={style} key={bubble.id}>
+              <div className="home-bubble"><span className="home-bubble-label">{bubble.term}</span></div>
+            </div>
+          );
         })}
       </div>
       <section className="home-stage" aria-label="智能猫娘">
-        <h1>🥰智 能 猫 娘😋</h1>
-        <Link className="home-launch" href={user ? "/chat" : "/register"}>👍🤓启动🤓👍</Link>
+        <div className="home-stage-content" ref={stageContentRef}>
+          <h1>🥰智 能 猫 娘😋</h1>
+          <Link className="home-launch" href={user ? "/chat" : "/register"}>👍🤓启动🤓👍</Link>
+        </div>
       </section>
     </main>
   );

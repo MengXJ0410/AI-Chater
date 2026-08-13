@@ -4,8 +4,9 @@ import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { ImagePlus, Palette, RotateCcw, Trash2 } from "lucide-react";
 import {
   ACCENT_SWATCHES,
+  APPEARANCE_CHANGE_EVENT,
   APPEARANCE_STORAGE_KEY,
-  darkerColor,
+  deriveAccentTheme,
   defaultAppearance,
   parseAppearance,
   type AppearancePreferences,
@@ -17,12 +18,22 @@ const maxImageDimension = 1920;
 
 function applyAppearance(appearance: AppearancePreferences) {
   const root = document.documentElement;
-  root.style.setProperty("--accent", appearance.accent);
-  root.style.setProperty("--accent-strong", darkerColor(appearance.accent));
+  const theme = deriveAccentTheme(appearance.accent);
+  root.style.setProperty("--accent", theme.accent);
+  root.style.setProperty("--accent-strong", theme.strong);
+  root.style.setProperty("--accent-soft", theme.soft);
+  root.style.setProperty("--accent-muted", theme.muted);
+  root.style.setProperty("--accent-border", theme.border);
+  root.style.setProperty("--accent-action", theme.action);
+  root.style.setProperty("--accent-action-alt", theme.actionAlt);
+  root.style.setProperty("--accent-action-text", theme.actionText);
   root.style.setProperty("--appearance-background", appearance.background ? `url(${appearance.background})` : "none");
   root.style.setProperty("--appearance-surface-opacity", String(appearance.surfaceOpacity / 100));
   root.style.setProperty("--appearance-background-blur", `${appearance.backgroundBlur}px`);
   root.dataset.hasBackground = appearance.background ? "true" : "false";
+  window.dispatchEvent(new CustomEvent(APPEARANCE_CHANGE_EVENT, {
+    detail: { accent: theme.accent, bubbleColorRange: appearance.bubbleColorRange, bubbleActivity: appearance.bubbleActivity },
+  }));
 }
 
 function persistAppearance(appearance: AppearancePreferences) {
@@ -152,6 +163,14 @@ export function AppearanceControl() {
               <input type="color" value={currentAppearance.accent} aria-label="自定义主题色" onChange={(event) => selectAccent(event.target.value)} />
             </label>
           </div>
+          <label className="appearance-slider appearance-color-range">
+            <span>气泡色差 <output>±{currentAppearance.bubbleColorRange}</output></span>
+            <input type="range" min="0" max="100" step="5" value={currentAppearance.bubbleColorRange} onChange={(event) => updateAppearance({ ...currentAppearance, bubbleColorRange: Number(event.target.value) })} />
+          </label>
+          <label className="appearance-slider appearance-bubble-activity">
+            <span>气泡活跃度 <output>{currentAppearance.bubbleActivity}%</output></span>
+            <input type="range" min="0" max="200" step="5" value={currentAppearance.bubbleActivity} onChange={(event) => updateAppearance({ ...currentAppearance, bubbleActivity: Number(event.target.value) })} />
+          </label>
           <div className="appearance-divider" />
           <div className="appearance-panel-header">
             <span>背景图</span>
