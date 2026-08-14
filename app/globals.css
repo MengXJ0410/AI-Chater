@@ -389,15 +389,34 @@ body:has(.home-hero) .appearance-panel { border-color: color-mix(in srgb, var(--
 .home-page-dots button:hover, .home-page-dots button.is-active { color: var(--accent-action-text); transform: translateX(-2px); }
 .home-page-dots button.is-active::before { border-color: var(--accent); background: var(--accent); box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 65%, transparent); transform: scale(1.25); }
 .home-about, .home-placeholder { position: relative; display: grid; overflow: hidden; background: #070d1b; color: #eef4ff; }
-.home-about-stars { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
-.home-star { position: absolute; display: block; border-radius: 50%; background: rgb(231 242 255 / 0.72); box-shadow: 0 0 8px rgb(173 211 255 / 0.72); animation: home-star-twinkle 3.6s ease-in-out infinite; }
-.home-meteor { position: absolute; display: block; width: 8rem; height: 1px; background: linear-gradient(90deg, transparent, rgb(195 224 255 / 0.16) 35%, rgb(255 255 255 / 0.92)); opacity: 0; transform: rotate(-28deg); transform-origin: right center; animation: home-meteor-fall 9s linear infinite; }
+.home-about-stars { position: absolute; z-index: 0; inset: 0; overflow: hidden; pointer-events: none; }
+.home-nebula { position: absolute; inset: -16%; border-radius: 50%; filter: blur(24px); mix-blend-mode: screen; pointer-events: none; }
+.home-nebula-far { opacity: 0.34; background: radial-gradient(ellipse at 18% 35%, color-mix(in srgb, var(--accent) 20%, #315fca) 0%, transparent 53%), radial-gradient(ellipse at 82% 72%, rgb(75 55 160 / 0.28) 0%, transparent 58%); animation: home-nebula-drift-far 42s ease-in-out infinite alternate; }
+.home-nebula-mid { inset: -24%; opacity: 0.2; background: radial-gradient(ellipse at 66% 23%, rgb(71 120 206 / 0.34) 0%, transparent 39%), radial-gradient(ellipse at 35% 78%, rgb(93 67 178 / 0.32) 0%, transparent 45%), radial-gradient(ellipse at 94% 44%, color-mix(in srgb, var(--accent) 16%, #2c87c9) 0%, transparent 37%); filter: blur(42px); animation: home-nebula-drift-mid 36s ease-in-out infinite alternate; }
+.home-nebula-dust { inset: -4%; opacity: 0.16; background: radial-gradient(circle at 22% 24%, rgb(125 170 255 / 0.42) 0 1px, transparent 2px), radial-gradient(circle at 67% 42%, rgb(191 157 255 / 0.35) 0 1px, transparent 2px), radial-gradient(circle at 78% 78%, rgb(120 216 255 / 0.34) 0 1px, transparent 2px), radial-gradient(circle at 41% 68%, rgb(174 151 255 / 0.25) 0 1px, transparent 2px); filter: blur(1px); animation: home-nebula-drift-dust 31s ease-in-out infinite alternate; }
+.home-star { position: absolute; display: block; border-radius: 50%; background: var(--star-color); box-shadow: 0 0 7px color-mix(in srgb, var(--star-color) 75%, transparent); opacity: var(--star-opacity); animation-delay: var(--star-delay); animation-duration: var(--star-duration); }
+.home-star-tiny { animation-name: home-star-fade; }
+.home-star-medium { animation-name: home-star-twinkle; }
+.home-star-bright { z-index: 1; animation-name: home-star-bright-twinkle; box-shadow: 0 0 12px 2px color-mix(in srgb, var(--star-color) 78%, transparent); }
+.home-star-bright::before, .home-star-bright::after { position: absolute; top: 50%; left: 50%; background: color-mix(in srgb, var(--star-color) 72%, white); content: ""; transform: translate(-50%, -50%); }
+.home-star-bright::before { width: 1px; height: 1.1rem; }
+.home-star-bright::after { width: 1.1rem; height: 1px; }
+.home-star-color-blue { --star-color: #9cc7ff; }
+.home-star-color-cyan { --star-color: #91e5ff; }
+.home-star-color-violet { --star-color: #c1a9ff; }
+.home-star-color-white { --star-color: #edf5ff; }
+.home-meteor { position: absolute; display: block; width: 8rem; height: 1px; background: linear-gradient(90deg, transparent, rgb(195 224 255 / 0.16) 35%, rgb(255 255 255 / 0.92)); opacity: 0; transform: rotate(28deg); transform-origin: right center; animation: home-meteor-fall 9s linear infinite; }
 .home-meteor::after { position: absolute; top: -2px; right: 0; width: 5px; height: 5px; border-radius: 50%; background: white; box-shadow: 0 0 12px 3px rgb(190 224 255 / 0.7); content: ""; }
-.home-about::after, .home-placeholder::after { position: absolute; inset: 0; background: linear-gradient(120deg, color-mix(in srgb, var(--accent) 12%, transparent), transparent 42%, rgb(22 45 82 / 0.16)); content: ""; pointer-events: none; }
+.home-about::after, .home-placeholder::after { position: absolute; z-index: 1; inset: 0; background: linear-gradient(120deg, color-mix(in srgb, var(--accent) 12%, transparent), transparent 42%, rgb(22 45 82 / 0.16)); content: ""; pointer-events: none; }
 .home-about-content { position: relative; z-index: 2; display: grid; width: min(100% - 8rem, 70rem); margin: auto; grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr); align-items: center; gap: clamp(2.5rem, 8vw, 7rem); padding: 3rem 0; }
 .home-about-author { border-right: 1px solid rgb(205 226 255 / 0.16); padding: 2rem clamp(1rem, 4vw, 3.7rem) 2rem 0; }
 .home-section-kicker { color: color-mix(in srgb, var(--accent) 86%, white); font-size: 0.7rem; font-weight: 750; letter-spacing: 0.16em; text-transform: uppercase; }
-.home-author-mark { display: grid; width: 3.5rem; height: 3.5rem; margin: 1.6rem 0 1.3rem; place-items: center; border: 1px solid color-mix(in srgb, var(--accent) 58%, white); border-radius: 12px; background: color-mix(in srgb, var(--accent) 20%, transparent); color: color-mix(in srgb, var(--accent) 74%, white); box-shadow: 0 0 24px color-mix(in srgb, var(--accent) 17%, transparent); }
+.home-author-avatar-frame { position: relative; display: grid; width: 7.2rem; height: 7.2rem; margin: 1.4rem 0 1.25rem; place-items: center; isolation: isolate; }
+.home-author-avatar-frame::before, .home-author-avatar-frame::after { position: absolute; border: 1px solid color-mix(in srgb, var(--accent) 78%, white); border-radius: 50%; content: ""; pointer-events: none; }
+.home-author-avatar-frame::before { inset: 0.15rem; border-right-color: transparent; border-bottom-color: rgb(224 239 255 / 0.82); box-shadow: 0 0 15px color-mix(in srgb, var(--accent) 28%, transparent); animation: home-avatar-orbit 8s linear infinite; }
+.home-author-avatar-frame::after { inset: 0.52rem; border-left-color: transparent; border-top-color: rgb(224 239 255 / 0.75); box-shadow: inset 0 0 12px color-mix(in srgb, var(--accent) 13%, transparent); animation: home-avatar-orbit-reverse 6s linear infinite; }
+.home-author-avatar, .home-author-avatar-fallback { position: relative; z-index: 1; display: grid; width: 5.45rem; height: 5.45rem; place-items: center; border: 2px solid color-mix(in srgb, var(--accent) 62%, white); border-radius: 50%; background: color-mix(in srgb, var(--accent) 20%, #111d31); color: color-mix(in srgb, var(--accent) 78%, white); object-fit: cover; box-shadow: 0 0 0 4px rgb(7 13 27 / 0.72), 0 0 22px color-mix(in srgb, var(--accent) 24%, transparent); }
+.home-author-avatar-fallback { font-size: 1.2rem; }
 .home-about h2 { margin: 0; color: #f5f8ff; font-size: clamp(1.75rem, 3.4vw, 2.65rem); font-weight: 720; letter-spacing: 0.01em; line-height: 1.15; }
 .home-about-author p { max-width: 17rem; margin: 1rem 0 0; color: rgb(207 220 240 / 0.68); font-size: 0.9rem; line-height: 1.8; }
 .home-author-links { display: grid; gap: 0.55rem; margin-top: 1.8rem; }
@@ -418,15 +437,23 @@ body:has(.home-hero) .appearance-panel { border-color: color-mix(in srgb, var(--
 .home-placeholder h2 { margin: 0.9rem 0 0; color: #f5f8ff; font-size: clamp(1.7rem, 4vw, 2.6rem); }
 .home-placeholder p { margin: 0.9rem 0 0; color: rgb(204 219 240 / 0.58); font-size: 0.86rem; }
 @keyframes home-cue-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(4px); } }
-@keyframes home-star-twinkle { 0%, 100% { opacity: 0.38; transform: scale(0.82); } 50% { opacity: 1; transform: scale(1.2); } }
-@keyframes home-meteor-fall { 0%, 52% { opacity: 0; transform: translate3d(0, 0, 0) rotate(-28deg); } 58% { opacity: 0.9; } 72%, 100% { opacity: 0; transform: translate3d(-18rem, 12rem, 0) rotate(-28deg); } }
+@keyframes home-star-fade { 0%, 100% { opacity: 0.18; transform: scale(0.88); } 50% { opacity: var(--star-opacity); transform: scale(1.08); } }
+@keyframes home-star-twinkle { 0%, 100% { opacity: 0.22; transform: scale(0.82); } 48% { opacity: var(--star-opacity); transform: scale(1.12); } 64% { opacity: 0.34; transform: scale(0.96); } }
+@keyframes home-star-bright-twinkle { 0%, 100% { opacity: 0.28; transform: scale(0.82); } 35% { opacity: var(--star-opacity); transform: scale(1.18); } 48% { opacity: 0.4; transform: scale(0.96); } 62% { opacity: var(--star-opacity); transform: scale(1.1); } }
+@keyframes home-meteor-fall { 0%, 52% { opacity: 0; transform: translate3d(0, 0, 0) rotate(28deg); } 58% { opacity: 0.9; } 72%, 100% { opacity: 0; transform: translate3d(18rem, 12rem, 0) rotate(28deg); } }
+@keyframes home-nebula-drift-far { from { transform: translate3d(-2%, 1%, 0) scale(1); } to { transform: translate3d(3%, -2%, 0) scale(1.05); } }
+@keyframes home-nebula-drift-mid { from { transform: translate3d(2%, -2%, 0) scale(1.02); } to { transform: translate3d(-3%, 3%, 0) scale(1.08); } }
+@keyframes home-nebula-drift-dust { from { transform: translate3d(-1%, 1%, 0); } to { transform: translate3d(2%, -1%, 0); } }
+@keyframes home-avatar-orbit { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes home-avatar-orbit-reverse { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
 
 @media (max-width: 760px) {
   .home-page-dots { right: 0.7rem; }
   .home-page-dots button span { display: none; }
   .home-about-content { width: min(100% - 4.5rem, 34rem); grid-template-columns: 1fr; gap: 1.5rem; padding: 4.5rem 0 3rem; }
   .home-about-author { border-right: 0; border-bottom: 1px solid rgb(205 226 255 / 0.16); padding: 0 0 1.5rem; }
-  .home-author-mark { width: 3rem; height: 3rem; margin: 1rem 0; }
+.home-author-avatar-frame { width: 5.8rem; height: 5.8rem; margin: 0.95rem 0 1rem; }
+.home-author-avatar, .home-author-avatar-fallback { width: 4.35rem; height: 4.35rem; }
   .home-about h2 { font-size: clamp(1.55rem, 7.5vw, 2.1rem); }
   .home-feature-list { grid-template-columns: 1fr; gap: 0.75rem; }
   .home-about-project { padding: 0; }
@@ -435,6 +462,6 @@ body:has(.home-hero) .appearance-panel { border-color: color-mix(in srgb, var(--
 
 @media (prefers-reduced-motion: reduce) {
   .home-scroll-shell { scroll-behavior: auto; }
-  .home-explore-cue svg, .home-star, .home-meteor { animation: none; }
+  .home-explore-cue svg, .home-star, .home-meteor, .home-nebula, .home-author-avatar-frame::before, .home-author-avatar-frame::after { animation: none; }
   .home-meteor { opacity: 0.28; }
 }

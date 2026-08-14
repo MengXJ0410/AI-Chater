@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import NextImage from "next/image";
 import { useRouter } from "next/navigation";
 import { CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Bot, ChevronDown, Github, Image as ImageIcon, Layers3, LogOut, MessageSquareText, Settings2, WandSparkles } from "lucide-react";
 import { pickAiTerms } from "@/lib/ai-terms";
+import { HOME_AUTHOR_PROFILE } from "@/lib/home-profile";
 import {
   APPEARANCE_CHANGE_EVENT,
   DEFAULT_ACCENT,
@@ -26,18 +28,13 @@ import {
   HOME_PAGE_COUNT,
   nextHomePageIndex,
 } from "@/lib/home-sections";
+import { HOME_STAR_POINTS } from "@/lib/home-sky";
 
 type HomeUser = { id: string; username: string } | null;
 
 type PointerPosition = { x: number; y: number } | null;
 
 const PAGE_LABELS = ["首页", "关于项目", "更多功能"];
-const STAR_POINTS = [
-  [8, 16, 1, 0], [17, 72, 2, 1.4], [26, 28, 1, 2.2], [34, 84, 1, 0.6], [43, 18, 2, 2.8],
-  [51, 62, 1, 1.7], [61, 34, 1, 0.3], [68, 78, 2, 2.5], [77, 14, 1, 1.1], [86, 52, 1, 2.1],
-  [93, 26, 2, 0.8], [12, 42, 1, 3.1], [31, 56, 1, 1.9], [57, 12, 1, 2.6], [73, 47, 1, 0.5],
-  [89, 82, 1, 1.8], [5, 91, 1, 2.9], [47, 91, 2, 1.2], [81, 67, 1, 0.2], [64, 90, 1, 2.4],
-] as const;
 const METEOR_PATHS = [
   { left: "18%", top: "14%", delay: "0s", duration: "8.5s" },
   { left: "74%", top: "21%", delay: "3.2s", duration: "10s" },
@@ -61,6 +58,7 @@ export function HomeHero({ backgrounds, user }: { backgrounds: string[]; user: H
   const wheelLockedRef = useRef(false);
   const wheelUnlockTimerRef = useRef<number | null>(null);
   const [activePage, setActivePage] = useState(0);
+  const [avatarAvailable, setAvatarAvailable] = useState(true);
 
   const scrollToPage = useCallback((index: number, behavior: ScrollBehavior = "smooth") => {
     const shell = scrollRef.current;
@@ -264,24 +262,31 @@ export function HomeHero({ backgrounds, user }: { backgrounds: string[]; user: H
 
       <section className="home-page home-about" ref={(element) => { pageRefs.current[1] = element; }} aria-labelledby="home-about-title">
         <div className="home-about-stars" aria-hidden="true">
-          {STAR_POINTS.map(([left, top, size, delay]) => <span className="home-star" style={{ left: `${left}%`, top: `${top}%`, width: `${size}px`, height: `${size}px`, animationDelay: `${delay}s` }} key={`${left}-${top}`} />)}
+          <div className="home-nebula home-nebula-far" />
+          <div className="home-nebula home-nebula-mid" />
+          <div className="home-nebula home-nebula-dust" />
+          {HOME_STAR_POINTS.map((star) => <span className={`home-star home-star-${star.kind} home-star-color-${star.color}`} style={{ left: `${star.left}%`, top: `${star.top}%`, width: `${star.size}px`, height: `${star.size}px`, "--star-opacity": star.opacity, "--star-delay": `${star.delay}s`, "--star-duration": `${star.duration}s` } as CSSProperties} key={`${star.left}-${star.top}`} />)}
           {METEOR_PATHS.map((meteor) => <span className="home-meteor" style={{ left: meteor.left, top: meteor.top, animationDelay: meteor.delay, animationDuration: meteor.duration }} key={meteor.left} />)}
         </div>
         <div className="home-about-content">
           <div className="home-about-author">
-            <span className="home-section-kicker">作者</span>
-            <div className="home-author-mark"><Bot size={24} /></div>
-            <h2>もNKI傑</h2>
-            <p>———愿我们都能找到生活的意义。</p>
+            <span className="home-section-kicker">author</span>
+            <div className="home-author-avatar-frame" aria-label={`${HOME_AUTHOR_PROFILE.name}头像`}>
+              {avatarAvailable ? <NextImage className="home-author-avatar" src={HOME_AUTHOR_PROFILE.avatarSrc} alt={`${HOME_AUTHOR_PROFILE.name}头像`} width={96} height={96} onError={() => setAvatarAvailable(false)} /> : <div className="home-author-avatar-fallback" aria-hidden="true"><Bot size={30} /></div>}
+            </div>
+            <h2>{HOME_AUTHOR_PROFILE.name}</h2>
+            <p>{HOME_AUTHOR_PROFILE.bio}</p>
             <div className="home-author-links">
-              <a href="https://github.com/MengXJ0410/AI-Chater" target="_blank" rel="noreferrer"><Github size={16} />GitHub<ArrowUpRight size={14} /></a>
-              <span><MessageSquareText size={16} />B站链接待补充</span>
+              <a href={HOME_AUTHOR_PROFILE.githubUrl} target="_blank" rel="noreferrer"><Github size={16} />GitHub<ArrowUpRight size={14} /></a>
+              <a href={HOME_AUTHOR_PROFILE.bilibiliUrl} target="_blank" rel="noreferrer"><MessageSquareText size={16} />Bilibili<ArrowUpRight size={14} /></a>
+              <a href={HOME_AUTHOR_PROFILE.csdnUrl} target="_blank" rel="noreferrer"><MessageSquareText size={16} />CSDN<ArrowUpRight size={14} /></a>
+              <a href={HOME_AUTHOR_PROFILE.WebUrl4} target="_blank" rel="noreferrer"><MessageSquareText size={16} />WEB4<ArrowUpRight size={14} /></a>
             </div>
           </div>
           <div className="home-about-project">
             <span className="home-section-kicker">关于 AI Chater</span>
-            <h2 id="home-about-title">把模型能力，整理成一个顺手的工作台。</h2>
-            <p className="home-project-lead">从一次对话开始，逐步连接模型、工具和未来的 Agent 能力。</p>
+            <h2 id="home-about-title">无限可能的小助手</h2>
+            <p className="home-project-lead">追求将AI的能力发挥到极致</p>
             <ul className="home-feature-list">
               <li><MessageSquareText size={18} /><span><strong>连续对话</strong><small>多会话、流式回复和历史记录。</small></span></li>
               <li><Layers3 size={18} /><span><strong>模型预设</strong><small>在不同模型和 Provider 之间切换。</small></span></li>
