@@ -1,5 +1,7 @@
 export const APPEARANCE_STORAGE_KEY = "ai-chater-appearance-v1";
 export const APPEARANCE_CHANGE_EVENT = "ai-chater:appearance-change";
+export const CHAT_BACKGROUND_STORAGE_KEY = "ai-chater-chat-background-v1";
+export const CHAT_BACKGROUND_CHANGE_EVENT = "ai-chater:chat-background-change";
 export const DEFAULT_ACCENT = "#12634f";
 export const ACCENT_SWATCHES = ["#12634f", "#2f63c8", "#9f3f68", "#c25d22", "#7057b8"];
 
@@ -24,6 +26,8 @@ export type DerivedAccentTheme = {
 };
 
 export type AppearanceChangeDetail = { accent: string; bubbleColorRange: number; bubbleActivity: number };
+export type ChatBackgroundChangeDetail = { enabled: boolean };
+export type AppearancePanelVisibility = { showBubbleControls: boolean; showBackgroundControls: boolean };
 export type BubbleColorFactors = { redFactor: number; greenFactor: number; blueFactor: number };
 export type DerivedBubbleColor = { primary: string; secondary: string; text: string };
 
@@ -35,6 +39,12 @@ export const defaultAppearance: AppearancePreferences = {
   bubbleColorRange: 60,
   bubbleActivity: 70,
 };
+
+export function getAppearancePanelVisibility(pathname: string, chatBackgroundEnabled: boolean): AppearancePanelVisibility {
+  if (pathname === "/") return { showBubbleControls: true, showBackgroundControls: true };
+  if (pathname === "/chat") return { showBubbleControls: false, showBackgroundControls: chatBackgroundEnabled };
+  return { showBubbleControls: false, showBackgroundControls: false };
+}
 
 export function isHexColor(value: unknown): value is string {
   return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value);

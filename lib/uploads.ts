@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { mkdir, readFile, rm, writeFile } from "fs/promises";
 import path from "path";
 import { getMaxUploadBytes, getUploadDirectory } from "@/lib/config";
+import { RequestError } from "@/lib/http";
 
 const supportedTypes: Record<string, string> = {
   "image/jpeg": "jpg",
@@ -12,9 +13,9 @@ const supportedTypes: Record<string, string> = {
 
 export function validateImage(file: File) {
   const extension = supportedTypes[file.type];
-  if (!extension) throw new Error("仅支持 PNG、JPEG、WebP 或 GIF 图片。");
-  if (file.size === 0) throw new Error("图片不能为空。");
-  if (file.size > getMaxUploadBytes()) throw new Error("图片超过大小限制。");
+  if (!extension) throw new RequestError("仅支持 PNG、JPEG、WebP 或 GIF 图片。");
+  if (file.size === 0) throw new RequestError("图片不能为空。");
+  if (file.size > getMaxUploadBytes()) throw new RequestError("图片超过大小限制。");
   return extension;
 }
 

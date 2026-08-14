@@ -1,14 +1,19 @@
 "use client";
 
 import { ChangeEvent, useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { ImagePlus, Palette, RotateCcw, Trash2 } from "lucide-react";
 import {
   ACCENT_SWATCHES,
   APPEARANCE_CHANGE_EVENT,
   APPEARANCE_STORAGE_KEY,
+  CHAT_BACKGROUND_CHANGE_EVENT,
+  CHAT_BACKGROUND_STORAGE_KEY,
   deriveAccentTheme,
   defaultAppearance,
+  getAppearancePanelVisibility,
   parseAppearance,
+  type ChatBackgroundChangeDetail,
   type AppearancePreferences,
 } from "@/lib/appearance";
 
@@ -83,13 +88,16 @@ async function compressBackground(file: File) {
 }
 
 export function AppearanceControl() {
+  const pathname = usePathname();
   const [appearance, setAppearance] = useState<AppearancePreferences>(defaultAppearance);
+  const [chatBackgroundEnabled, setChatBackgroundEnabled] = useState(false);
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
   const [uploading, setUploading] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const currentAppearance = { ...defaultAppearance, ...appearance };
+  const visibility = getAppearancePanelVisibility(pathname, chatBackgroundEnabled);
 
   useEffect(() => {
     void Promise.resolve().then(() => {
@@ -97,6 +105,17 @@ export function AppearanceControl() {
       applyAppearance(saved);
       setAppearance(saved);
     });
+  }, []);
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem(CHAT_BACKGROUND_STORAGE_KEY) === "enabled";
+    void Promise.resolve().then(() => setChatBackgroundEnabled(saved));
+    const handleChatBackgroundChange = (event: Event) => {
+      const detail = (event as CustomEvent<ChatBackgroundChangeDetail>).detail;
+      if (typeof detail?.enabled === "boolean") setChatBackgroundEnabled(detail.enabled);
+    };
+    window.addEventListener(CHAT_BACKGROUND_CHANGE_EVENT, handleChatBackgroundChange);
+    return () => window.removeEventListener(CHAT_BACKGROUND_CHANGE_EVENT, handleChatBackgroundChange);
   }, []);
 
   useEffect(() => {
@@ -163,36 +182,40 @@ export function AppearanceControl() {
               <input type="color" value={currentAppearance.accent} aria-label="自定义主题色" onChange={(event) => selectAccent(event.target.value)} />
             </label>
           </div>
-          <label className="appearance-slider appearance-color-range">
-            <span>气泡色差 <output>±{currentAppearance.bubbleColorRange}</output></span>
-            <input type="range" min="0" max="100" step="5" value={currentAppearance.bubbleColorRange} onChange={(event) => updateAppearance({ ...currentAppearance, bubbleColorRange: Number(event.target.value) })} />
-          </label>
-          <label className="appearance-slider appearance-bubble-activity">
-            <span>气泡活跃度 <output>{currentAppearance.bubbleActivity}%</output></span>
-            <input type="range" min="0" max="200" step="5" value={currentAppearance.bubbleActivity} onChange={(event) => updateAppearance({ ...currentAppearance, bubbleActivity: Number(event.target.value) })} />
-          </label>
-          <div className="appearance-divider" />
-          <div className="appearance-panel-header">
-            <span>背景图</span>
-            <div className="appearance-actions">
-              <button className="appearance-icon-button" data-tooltip="上传背景" type="button" aria-label="上传背景图" disabled={uploading} onClick={() => fileInputRef.current?.click()}><ImagePlus size={16} /></button>
-              <button className="appearance-icon-button" data-tooltip="移除背景" type="button" aria-label="移除背景图" disabled={!currentAppearance.background} onClick={() => updateAppearance({ ...currentAppearance, background: null })}><Trash2 size={16} /></button>
+          {visibility.showBubbleControls ? <>
+            <label className="appearance-slider appearance-color-range">
+              <span>气泡色差 <output>±{currentAppearance.bubbleColorRange}</output></span>
+              <input type="range" min="0" max="100" step="5" value={currentAppearance.bubbleColorRange} onChange={(event) => updateAppearance({ ...currentAppearance, bubbleColorRange: Number(event.target.value) })} />
+            </label>
+            <label className="appearance-slider appearance-bubble-activity">
+              <span>气泡活跃度 <output>{currentAppearance.bubbleActivity}%</output></span>
+              <input type="range" min="0" max="200" step="5" value={currentAppearance.bubbleActivity} onChange={(event) => updateAppearance({ ...currentAppearance, bubbleActivity: Number(event.target.value) })} />
+            </label>
+          </> : null}
+          {visibility.showBackgroundControls ? <>
+            <div className="appearance-divider" />
+            <div className="appearance-panel-header">
+              <span>背景图</span>
+              <div className="appearance-actions">
+                <button className="appearance-icon-button" data-tooltip="上传背景" type="button" aria-label="上传背景图" disabled={uploading} onClick={() => fileInputRef.current?.click()}><ImagePlus size={16} /></button>
+                <button className="appearance-icon-button" data-tooltip="移除背景" type="button" aria-label="移除背景图" disabled={!currentAppearance.background} onClick={() => updateAppearance({ ...currentAppearance, background: null })}><Trash2 size={16} /></button>
+              </div>
             </div>
-          </div>
-          <input className="appearance-file-input" ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={handleBackgroundUpload} />
-          <div className={`appearance-preview ${currentAppearance.background ? "has-background" : ""}`} style={currentAppearance.background ? { backgroundImage: `url(${currentAppearance.background})` } : undefined}>
-            {uploading ? "正在处理图片..." : currentAppearance.background ? "" : "尚未设置背景"}
-          </div>
-          <div className="appearance-sliders">
-            <label className="appearance-slider">
-              <span>背景透明度 <output>{currentAppearance.surfaceOpacity}%</output></span>
-              <input type="range" min="20" max="100" value={currentAppearance.surfaceOpacity} onChange={(event) => updateAppearance({ ...currentAppearance, surfaceOpacity: Number(event.target.value) })} />
-            </label>
-            <label className="appearance-slider">
-              <span>背景模糊度 <output>{currentAppearance.backgroundBlur}px</output></span>
-              <input type="range" min="0" max="24" value={currentAppearance.backgroundBlur} onChange={(event) => updateAppearance({ ...currentAppearance, backgroundBlur: Number(event.target.value) })} />
-            </label>
-          </div>
+            <input className="appearance-file-input" ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={handleBackgroundUpload} />
+            <div className={`appearance-preview ${currentAppearance.background ? "has-background" : ""}`} style={currentAppearance.background ? { backgroundImage: `url(${currentAppearance.background})` } : undefined}>
+              {uploading ? "正在处理图片..." : currentAppearance.background ? "" : "尚未设置背景"}
+            </div>
+            <div className="appearance-sliders">
+              <label className="appearance-slider">
+                <span>背景透明度 <output>{currentAppearance.surfaceOpacity}%</output></span>
+                <input type="range" min="20" max="100" value={currentAppearance.surfaceOpacity} onChange={(event) => updateAppearance({ ...currentAppearance, surfaceOpacity: Number(event.target.value) })} />
+              </label>
+              <label className="appearance-slider">
+                <span>背景模糊度 <output>{currentAppearance.backgroundBlur}px</output></span>
+                <input type="range" min="0" max="24" value={currentAppearance.backgroundBlur} onChange={(event) => updateAppearance({ ...currentAppearance, backgroundBlur: Number(event.target.value) })} />
+              </label>
+            </div>
+          </> : null}
           {error ? <p className="appearance-error" role="alert">{error}</p> : null}
           </section>
         ) : null}

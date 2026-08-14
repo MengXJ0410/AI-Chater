@@ -25,7 +25,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "操作失败，请重试。");
-      router.replace("/chat");
+      router.replace("/");
       router.refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "操作失败，请重试。");

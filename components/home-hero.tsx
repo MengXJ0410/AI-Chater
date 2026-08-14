@@ -191,7 +191,7 @@ export function HomeHero({ backgrounds, user }: { backgrounds: string[]; user: H
       <section className="home-stage" aria-label="智能猫娘">
         <div className="home-stage-content" ref={stageContentRef}>
           <h1>🥰智 能 猫 娘😋</h1>
-          <Link className="home-launch" href={user ? "/chat" : "/register"}>👍🤓启动🤓👍</Link>
+          <Link className="home-launch" href={user ? "/chat" : "/login"}>👍🤓启动🤓👍</Link>
         </div>
       </section>
     </main>

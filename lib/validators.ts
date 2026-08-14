@@ -1,9 +1,24 @@
 import { z } from "zod";
 
+const passwordSchema = z.string().min(8, "密码至少需要 8 位。").max(128, "密码不能超过 128 位。");
+
 export const credentialsSchema = z.object({
   username: z.string().trim().regex(/^[a-zA-Z0-9_-]{3,32}$/, "用户名只能使用 3-32 位字母、数字、下划线或连字符。"),
-  password: z.string().min(8, "密码至少需要 8 位。").max(128, "密码不能超过 128 位。"),
+  password: passwordSchema,
 });
+
+export const passwordChangeSchema = z.object({
+  currentPassword: passwordSchema,
+  newPassword: passwordSchema,
+});
+
+export const deleteAccountSchema = z.object({
+  password: passwordSchema,
+});
+
+export function normalizeUsername(username: string) {
+  return username.trim().toLowerCase();
+}
 
 export const conversationSchema = z.object({
   title: z.string().trim().min(1).max(120),

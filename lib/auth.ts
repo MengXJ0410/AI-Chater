@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "crypto";
 import argon2 from "argon2";
-import { and, eq, gt } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/db";
 import { sessions, users } from "@/lib/db/schema";
@@ -45,10 +45,17 @@ export async function createSession(userId: string) {
 export async function deleteSession() {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value;
-  if (token) {
-    await getDb().delete(sessions).where(eq(sessions.tokenHash, hashToken(token)));
+  try {
+    if (token) {
+      await getDb().delete(sessions).where(eq(sessions.tokenHash, hashToken(token)));
+    }
+  } finally {
+    cookieStore.delete(SESSION_COOKIE);
   }
-  cookieStore.delete(SESSION_COOKIE);
+}
+
+export async function clearSessionCookie() {
+  (await cookies()).delete(SESSION_COOKIE);
 }
 
 export async function getCurrentUser() {
@@ -56,13 +63,26 @@ export async function getCurrentUser() {
   if (!token) return null;
 
   const result = await getDb()
-    .select({ id: users.id, username: users.username })
+    .select({
+      sessionId: sessions.id,
+      expiresAt: sessions.expiresAt,
+      id: users.id,
+      username: users.username,
+      deletedAt: users.deletedAt,
+    })
     .from(sessions)
     .innerJoin(users, eq(sessions.userId, users.id))
-    .where(and(eq(sessions.tokenHash, hashToken(token)), gt(sessions.expiresAt, new Date())))
+    .where(eq(sessions.tokenHash, hashToken(token)))
     .limit(1);
 
-  return result[0] ?? null;
+  const session = result[0];
+  if (!session) return null;
+  if (session.expiresAt <= new Date() || session.deletedAt) {
+    await getDb().delete(sessions).where(eq(sessions.id, session.sessionId));
+    return null;
+  }
+
+  return { id: session.id, username: session.username };
 }
 
 export async function requireUser() {

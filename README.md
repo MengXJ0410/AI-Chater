@@ -9,14 +9,15 @@
 
 ## 本机启动
 
-1. 在 MySQL 中创建数据库：
-   ```sql
-   CREATE DATABASE ai_chater CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+1. 使用本机 MySQL 管理员账号执行 `docs/local-mysql-init.sql`。执行前把文件中的 `REPLACE_WITH_A_URL_SAFE_PASSWORD` 替换成应用账号密码；管理员密码不要写入仓库。
+   ```powershell
+   Get-Content .\docs\local-mysql-init.sql | mysql -u root -p
    ```
 2. 复制环境模板并填写数据库地址、模型预设和 API Key：
    ```powershell
    Copy-Item .env.example .env
    ```
+   `.env` 中的 `DATABASE_URL` 使用 `mysql://ai_chater_app:<password>@127.0.0.1:3306/ai_chater`。密码包含 `@`、`#`、`/` 等特殊字符时必须先进行 URL 编码。
 3. 安装依赖、执行 migration、启动开发服务器：
    ```powershell
    npm install
@@ -52,5 +53,7 @@ npm run test         # 单元测试
 npm run db:generate  # 从 schema 生成 migration
 npm run db:migrate   # 执行 migration
 ```
+
+账号管理接口：`PATCH /api/me/password` 修改密码（请求体为 `currentPassword`、`newPassword`），`DELETE /api/me` 软删除当前账号（请求体为 `password`）。软删除会撤销全部会话、保留历史聊天和图片数据，并释放原用户名供重新注册。
 
 图片会保存至 `UPLOAD_DIR`（默认 `data/uploads`），该目录与 `.env` 均已排除在 Git 之外。此项目按本机使用设计；请勿在未增加访问控制、HTTPS 和注册策略前公开部署。

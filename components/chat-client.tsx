@@ -1,10 +1,11 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
 
-import { ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bot, ImagePlus, LoaderCircle, LogOut, MessageSquarePlus, Pencil, SendHorizontal, Sparkles, Square, Trash2, X } from "lucide-react";
+import { Bot, ChevronLeft, ChevronRight, Command, FileImage, ImagePlus, LayoutPanelLeft, LoaderCircle, LogOut, Menu, MessageSquarePlus, MoreHorizontal, Pencil, SendHorizontal, Settings2, Sparkles, Square, Trash2, Video, WandSparkles, X } from "lucide-react";
 import { Markdown } from "@/components/markdown";
+import { CHAT_BACKGROUND_CHANGE_EVENT, CHAT_BACKGROUND_STORAGE_KEY } from "@/lib/appearance";
 import type { MessagePart } from "@/lib/messages";
 
 type User = { id: string; username: string };
@@ -12,6 +13,28 @@ type Conversation = { id: string; title: string; createdAt: string; updatedAt: s
 type ChatMessage = { id: string; role: "user" | "assistant"; parts: MessagePart[]; presetId: string | null; model: string | null; createdAt: string };
 type AiPreset = { id: string; label: string; model: string; supportsImages: boolean };
 type PendingAttachment = { id: string; originalName: string };
+type ToolId = "chat" | "image" | "video" | "agent";
+type ConfigDraft = { provider: string; baseUrl: string; model: string };
+
+const CONFIG_STORAGE_KEY = "ai-chater-chat-config-v1";
+const SIDEBAR_STORAGE_KEY = "ai-chater-chat-sidebar-v1";
+const TOOL_ITEMS: Array<{ id: ToolId; label: string; description: string; icon: typeof Command }> = [
+  { id: "chat", label: "对话", description: "与模型进行连续对话", icon: Command },
+  { id: "image", label: "生图", description: "从文字生成图像", icon: FileImage },
+  { id: "video", label: "视频", description: "生成和编辑视频", icon: Video },
+  { id: "agent", label: "Agent", description: "组合工具完成任务", icon: WandSparkles },
+];
+
+function readConfigDraft(): ConfigDraft {
+  const fallback = { provider: "openai-compatible", baseUrl: "", model: "" };
+  if (typeof window === "undefined") return fallback;
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(CONFIG_STORAGE_KEY) ?? "null") as Partial<ConfigDraft> | null;
+    return saved ? { ...fallback, ...saved } : fallback;
+  } catch {
+    return fallback;
+  }
+}
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
@@ -32,12 +55,23 @@ export function ChatClient({ user }: { user: User }) {
   const [isSending, setIsSending] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState("");
+  const [activeTool, setActiveTool] = useState<ToolId>("chat");
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(() => typeof window === "undefined" || window.localStorage.getItem(SIDEBAR_STORAGE_KEY) !== "collapsed");
+  const [isChatBackgroundEnabled, setIsChatBackgroundEnabled] = useState(() => typeof window !== "undefined" && window.localStorage.getItem(CHAT_BACKGROUND_STORAGE_KEY) === "enabled");
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isAccountPanelOpen, setIsAccountPanelOpen] = useState(false);
+  const [isConfigDrawerOpen, setIsConfigDrawerOpen] = useState(false);
+  const [configDraft, setConfigDraft] = useState<ConfigDraft>(readConfigDraft);
+  const [apiKey, setApiKey] = useState("");
+  const [configNotice, setConfigNotice] = useState("");
+  const [configError, setConfigError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
 
   const activeConversation = conversations.find((item) => item.id === activeConversationId) ?? null;
   const selectedPreset = presets.find((preset) => preset.id === presetId);
+  const activeToolMeta = TOOL_ITEMS.find((item) => item.id === activeTool) ?? TOOL_ITEMS[0];
 
   const loadConversations = useCallback(async () => {
     const data = await requestJson<{ conversations: Conversation[] }>("/api/conversations");
@@ -251,60 +285,116 @@ export function ChatClient({ user }: { user: User }) {
     abortControllerRef.current?.abort();
   }
 
+  function toggleSidebar() {
+    setIsSidebarExpanded((current) => {
+      const next = !current;
+      window.localStorage.setItem(SIDEBAR_STORAGE_KEY, next ? "expanded" : "collapsed");
+      return next;
+    });
+  }
+
+  function selectTool(tool: ToolId) {
+    setActiveTool(tool);
+    setIsSidebarOpen(false);
+  }
+
+  function saveConfig(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setConfigError("");
+    setConfigNotice("");
+    if (configDraft.baseUrl && !/^https?:\/\//i.test(configDraft.baseUrl)) {
+      setConfigError("Base URL 需要以 http:// 或 https:// 开头。");
+      return;
+    }
+    window.localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(configDraft));
+    setConfigNotice("已保存前端草稿，等待服务端接入。");
+  }
+
+  function clearConfig() {
+    window.localStorage.removeItem(CONFIG_STORAGE_KEY);
+    setConfigDraft({ provider: "openai-compatible", baseUrl: "", model: "" });
+    setApiKey("");
+    setConfigNotice("已清空本地草稿。");
+    setConfigError("");
+  }
+
+  function toggleChatBackground() {
+    setIsChatBackgroundEnabled((current) => {
+      const next = !current;
+      window.localStorage.setItem(CHAT_BACKGROUND_STORAGE_KEY, next ? "enabled" : "disabled");
+      window.dispatchEvent(new CustomEvent(CHAT_BACKGROUND_CHANGE_EVENT, { detail: { enabled: next } }));
+      return next;
+    });
+  }
+
   return (
-    <main className="chat-app flex h-screen overflow-hidden bg-[var(--background)]">
-      <aside className="chat-sidebar flex w-72 shrink-0 flex-col border-r border-[var(--border)] bg-white max-md:w-56">
-        <div className="sidebar-header flex h-16 items-center justify-between border-b border-[var(--border)] px-4">
-          <div className="brand-lockup flex items-center gap-2 font-semibold"><span className="brand-icon grid h-7 w-7 place-items-center rounded-md"><Sparkles size={16} /></span><span>AI Chater</span></div>
-          <button className="icon-button sidebar-new grid h-8 w-8 place-items-center rounded-md hover:bg-slate-100" title="新建会话" aria-label="新建会话" onClick={() => createConversation().catch((cause) => setError(cause.message))} disabled={isSending}><MessageSquarePlus size={18} /></button>
+    <main className={`chat-app ${isChatBackgroundEnabled ? "has-background" : ""}`}>
+      <div className={`chat-mobile-scrim ${isSidebarOpen || isAccountPanelOpen || isConfigDrawerOpen ? "is-visible" : ""}`} onClick={() => { setIsSidebarOpen(false); setIsAccountPanelOpen(false); setIsConfigDrawerOpen(false); }} aria-hidden="true" />
+      <aside className={`chat-sidebar ${isSidebarExpanded ? "is-expanded" : "is-collapsed"} ${isSidebarOpen ? "is-mobile-open" : ""}`}>
+        <div className="chat-sidebar-header">
+          <div className="chat-brand"><span className="chat-brand-icon"><Sparkles size={16} /></span><span className="chat-sidebar-label">AI Chater</span></div>
+          <button className="chat-icon-button chat-sidebar-toggle" title={isSidebarExpanded ? "收起工具栏" : "展开工具栏"} aria-label={isSidebarExpanded ? "收起工具栏" : "展开工具栏"} onClick={toggleSidebar}>{isSidebarExpanded ? <ChevronLeft size={17} /> : <ChevronRight size={17} />}</button>
         </div>
-        <nav className="conversation-list min-h-0 flex-1 overflow-y-auto p-2" aria-label="会话列表">
-          {conversations.map((conversation) => (
-            <div className={`conversation-row group mb-1 flex h-10 items-center gap-1 rounded-md px-2 ${conversation.id === activeConversationId ? "is-active bg-emerald-50 text-[var(--accent-strong)]" : "hover:bg-slate-100"}`} key={conversation.id}>
-              <button className="min-w-0 flex-1 truncate text-left text-sm" onClick={() => setActiveConversationId(conversation.id)}>{conversation.title}</button>
-              <button className="icon-button conversation-delete invisible grid h-7 w-7 place-items-center rounded hover:bg-white group-hover:visible" title="删除会话" aria-label={`删除 ${conversation.title}`} onClick={() => deleteConversation(conversation.id)}><Trash2 size={15} /></button>
+        <div className="chat-sidebar-scroll">
+          <button className="chat-config-entry" onClick={() => { setIsConfigDrawerOpen(true); setIsSidebarOpen(false); }} title="配置大模型">
+            <Settings2 size={18} /><span className="chat-sidebar-label">配置</span><span className="chat-config-status chat-sidebar-label">前端草稿</span>
+          </button>
+          <div className="chat-section-heading chat-sidebar-label">功能</div>
+          <nav className="chat-tool-nav" aria-label="功能导航">
+            {TOOL_ITEMS.map((item) => { const Icon = item.icon; return <button className={`chat-tool-item ${activeTool === item.id ? "is-active" : ""}`} key={item.id} onClick={() => selectTool(item.id)} title={item.label} aria-current={activeTool === item.id ? "page" : undefined}><Icon size={18} /><span className="chat-sidebar-label">{item.label}</span></button>; })}
+          </nav>
+          {activeTool === "chat" ? <section className="chat-history-section" aria-label="会话列表">
+            <div className="chat-section-heading chat-sidebar-label"><span>最近会话</span><button className="chat-icon-button" title="新建会话" aria-label="新建会话" onClick={() => createConversation().catch((cause) => setError(cause instanceof Error ? cause.message : "新建会话失败。"))} disabled={isSending}><MessageSquarePlus size={16} /></button></div>
+            <div className="chat-history-list">
+              {conversations.map((conversation) => <div className={`chat-history-row group ${conversation.id === activeConversationId ? "is-active" : ""}`} key={conversation.id}><button className="chat-history-title" onClick={() => { setActiveConversationId(conversation.id); setIsSidebarOpen(false); }}>{conversation.title}</button><button className="chat-icon-button chat-history-delete" title="删除会话" aria-label={`删除 ${conversation.title}`} onClick={() => deleteConversation(conversation.id)}><Trash2 size={14} /></button></div>)}
+              {!conversations.length ? <p className="chat-history-empty chat-sidebar-label">还没有会话</p> : null}
             </div>
-          ))}
-        </nav>
-        <div className="sidebar-footer flex items-center gap-2 border-t border-[var(--border)] p-3">
-          <div className="user-avatar grid h-8 w-8 place-items-center rounded-full bg-emerald-100 text-sm font-semibold text-[var(--accent-strong)]">{user.username.slice(0, 1).toUpperCase()}</div>
-          <span className="min-w-0 flex-1 truncate text-sm">{user.username}</span>
-          <button className="icon-button grid h-8 w-8 place-items-center rounded-md hover:bg-slate-100" title="退出登录" aria-label="退出登录" onClick={logout}><LogOut size={17} /></button>
+          </section> : null}
+        </div>
+        <div className="chat-sidebar-footer chat-sidebar-footer-stack">
+          <label className="chat-background-toggle" title="在聊天工作台显示当前外观背景图">
+            <input type="checkbox" checked={isChatBackgroundEnabled} onChange={toggleChatBackground} />
+            <span className="chat-toggle-track" aria-hidden="true"><span /></span>
+            <span className="chat-sidebar-label">开启背景图</span>
+          </label>
+          <div className="chat-user-footer">
+          <div className="chat-avatar">{user.username.slice(0, 1).toUpperCase()}</div><span className="chat-sidebar-label chat-user-name">{user.username}</span>
+          <button className="chat-icon-button" title="退出登录" aria-label="退出登录" onClick={logout}><LogOut size={17} /></button>
+          </div>
         </div>
       </aside>
 
-      <section className="chat-main flex min-w-0 flex-1 flex-col">
-        <header className="chat-toolbar flex h-16 shrink-0 items-center justify-between border-b border-[var(--border)] bg-white px-4">
-          <div className="flex min-w-0 items-center gap-1">
-            <h1 className="chat-title m-0 truncate text-base font-semibold">{activeConversation?.title ?? "新对话"}</h1>
-            {activeConversation ? <button className="icon-button grid h-8 w-8 place-items-center rounded-md hover:bg-slate-100" title="重命名会话" aria-label="重命名会话" onClick={renameConversation}><Pencil size={15} /></button> : null}
-          </div>
-          <select className="model-select h-9 max-w-52 rounded-md border border-[var(--border)] bg-white px-2 text-sm outline-none focus:border-[var(--accent)]" value={presetId} onChange={(event) => choosePreset(event.target.value)} disabled={!presets.length || isSending}>
-            {presets.length ? presets.map((preset) => <option value={preset.id} key={preset.id}>{preset.label} · {preset.model}</option>) : <option value="">未配置模型</option>}
-          </select>
+      <section className="chat-main">
+        <header className="chat-toolbar">
+          <div className="chat-toolbar-leading"><button className="chat-icon-button chat-mobile-menu" title="打开工具栏" aria-label="打开工具栏" onClick={() => setIsSidebarOpen(true)}><Menu size={19} /></button><div className="chat-tool-heading"><span className="chat-tool-eyebrow">{activeToolMeta.label}</span><h1>{activeTool === "chat" ? (activeConversation?.title ?? "新对话") : activeToolMeta.description}</h1></div>{activeTool === "chat" && activeConversation ? <button className="chat-icon-button" title="重命名会话" aria-label="重命名会话" onClick={renameConversation}><Pencil size={15} /></button> : null}</div>
+          <div className="chat-toolbar-actions"><select className="model-select" value={presetId} onChange={(event) => choosePreset(event.target.value)} disabled={activeTool !== "chat" || !presets.length || isSending}>{presets.length ? presets.map((preset) => <option value={preset.id} key={preset.id}>{preset.label} · {preset.model}</option>) : <option value="">未配置模型</option>}</select><button className="chat-account-trigger" title="账号面板" aria-label="打开账号面板" aria-expanded={isAccountPanelOpen} onClick={() => setIsAccountPanelOpen((current) => !current)}><span className="chat-avatar">{user.username.slice(0, 1).toUpperCase()}</span><span className="chat-account-trigger-name">{user.username}</span></button></div>
         </header>
 
-        <div className="flex min-h-0 flex-1 flex-col">
-          <div className="message-scroll flex-1 overflow-y-auto" ref={messageListRef}>
-            <div className="message-stream mx-auto flex w-full max-w-3xl flex-col gap-6 px-5 py-7">
-              {!messages.length ? <div className="empty-chat-state mt-20 text-center text-sm text-[var(--muted)]"><span><Sparkles size={22} /></span><strong>新对话</strong></div> : null}
-              {messages.map((message) => <MessageView message={message} key={message.id} />)}
-            </div>
-          </div>
-          <div className="composer-shell border-t border-[var(--border)] bg-white px-4 py-3">
-            <div className="composer-inner mx-auto max-w-3xl">
-              {attachments.length ? <div className="attachment-list mb-2 flex flex-wrap gap-2">{attachments.map((attachment) => <div className="attachment-chip flex items-center gap-1 rounded-md border border-[var(--border)] bg-slate-50 px-2 py-1 text-xs" key={attachment.id}><span className="max-w-36 truncate">{attachment.originalName}</span><button className="icon-button grid h-4 w-4 place-items-center rounded hover:bg-slate-200" title="移除图片" aria-label={`移除 ${attachment.originalName}`} onClick={() => removeAttachment(attachment)}><X size={12} /></button></div>)}</div> : null}
-              {error ? <p className="composer-error mb-2 text-sm text-[var(--danger)]">{error}</p> : null}
-              <div className="composer-box flex items-end gap-2 rounded-md border border-[var(--border)] bg-white p-2 focus-within:border-[var(--accent)]">
-                <input ref={fileInputRef} className="hidden" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple onChange={uploadFiles} />
-                <button className="icon-button attachment-button grid h-9 w-9 shrink-0 place-items-center rounded-md hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40" title="添加图片" aria-label="添加图片" onClick={() => fileInputRef.current?.click()} disabled={isUploading || !selectedPreset?.supportsImages || isSending}><ImagePlus size={19} /></button>
-                <textarea className="composer-input max-h-36 min-h-9 flex-1 resize-none border-0 bg-transparent px-1 py-2 text-sm outline-none" value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendMessage(); } }} placeholder={selectedPreset ? "发送消息" : "请先在 .env 中配置模型"} rows={1} disabled={isSending || !presetId} />
-                {isSending ? <button className="stop-button grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-800 text-white hover:bg-slate-700" title="停止生成" aria-label="停止生成" onClick={stopGenerating}><Square size={15} fill="currentColor" /></button> : <button className="primary-icon grid h-9 w-9 shrink-0 place-items-center rounded-md bg-[var(--accent)] text-white hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-40" title="发送消息" aria-label="发送消息" onClick={sendMessage} disabled={isUploading || !presetId || (!text.trim() && !attachments.length)}>{isUploading ? <LoaderCircle className="animate-spin" size={18} /> : <SendHorizontal size={18} />}</button>}
-              </div>
-            </div>
-          </div>
-        </div>
+        {activeTool !== "chat" ? <div className="chat-placeholder"><div className="chat-placeholder-icon"><MoreHorizontal size={26} /></div><span className="chat-tool-eyebrow">{activeToolMeta.label}</span><h2>{activeToolMeta.description}</h2><p>这个功能正在准备中，之后会在这里成为你的新工作窗口。</p><button className="chat-primary-button" onClick={() => selectTool("chat")}><Command size={16} />返回对话</button></div> : <div className="chat-conversation-workspace">
+          <div className="message-scroll" ref={messageListRef}><div className="message-stream">
+            {!messages.length ? <div className="empty-chat-state"><span><Sparkles size={22} /></span><strong>开始一段新对话</strong><small>输入问题，或从左侧切换其他工作功能。</small></div> : null}
+            {messages.map((message) => <MessageView message={message} key={message.id} />)}
+          </div></div>
+          <div className="composer-shell"><div className="composer-inner">
+            {attachments.length ? <div className="attachment-list">{attachments.map((attachment) => <div className="attachment-chip" key={attachment.id}><span>{attachment.originalName}</span><button className="chat-icon-button" title="移除图片" aria-label={`移除 ${attachment.originalName}`} onClick={() => removeAttachment(attachment)}><X size={12} /></button></div>)}</div> : null}
+            {error ? <p className="composer-error">{error}</p> : null}
+            <div className="composer-box"><input ref={fileInputRef} className="hidden" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple onChange={uploadFiles} /><button className="chat-icon-button attachment-button" title="添加图片" aria-label="添加图片" onClick={() => fileInputRef.current?.click()} disabled={isUploading || !selectedPreset?.supportsImages || isSending}><ImagePlus size={19} /></button><textarea className="composer-input" value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendMessage(); } }} placeholder={selectedPreset ? "发送消息" : "请先在 .env 中配置模型"} rows={1} disabled={isSending || !presetId} />{isSending ? <button className="chat-send-button is-stop" title="停止生成" aria-label="停止生成" onClick={stopGenerating}><Square size={15} fill="currentColor" /></button> : <button className="chat-send-button" title="发送消息" aria-label="发送消息" onClick={sendMessage} disabled={isUploading || !presetId || (!text.trim() && !attachments.length)}>{isUploading ? <LoaderCircle className="animate-spin" size={18} /> : <SendHorizontal size={18} />}</button>}</div>
+          </div></div>
+        </div>}
       </section>
+
+      <aside className={`chat-account-panel ${isAccountPanelOpen ? "is-open" : ""}`} aria-label="账号面板">
+        <div className="chat-drawer-header"><div><span className="chat-tool-eyebrow">账号</span><h2>个人空间</h2></div><button className="chat-icon-button" title="关闭账号面板" aria-label="关闭账号面板" onClick={() => setIsAccountPanelOpen(false)}><X size={18} /></button></div>
+        <div className="chat-account-card"><div className="chat-account-avatar">{user.username.slice(0, 1).toUpperCase()}</div><strong>{user.username}</strong><span><i />在线</span></div>
+        <div className="chat-account-placeholder"><LayoutPanelLeft size={17} /><span>更多账号与工作区设置即将开放</span></div>
+        <button className="chat-secondary-button" onClick={logout}><LogOut size={16} />退出登录</button>
+      </aside>
+
+      <aside className={`chat-config-drawer ${isConfigDrawerOpen ? "is-open" : ""}`} aria-label="模型配置">
+        <div className="chat-drawer-header"><div><span className="chat-tool-eyebrow">工作台配置</span><h2>连接你的模型</h2></div><button className="chat-icon-button" title="关闭配置" aria-label="关闭配置" onClick={() => setIsConfigDrawerOpen(false)}><X size={18} /></button></div>
+        <p className="chat-drawer-intro">这些字段目前只保存为前端草稿，正式连接需要服务端配置接口。</p>
+        <form className="chat-config-form" onSubmit={saveConfig}><label>Provider<select value={configDraft.provider} onChange={(event) => setConfigDraft((current) => ({ ...current, provider: event.target.value }))}><option value="openai-compatible">OpenAI Compatible</option><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option><option value="google">Google</option></select></label><label>Base URL<input type="url" value={configDraft.baseUrl} onChange={(event) => setConfigDraft((current) => ({ ...current, baseUrl: event.target.value }))} placeholder="https://api.example.com/v1" /></label><label>API Key<input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder="仅保存在当前页面" autoComplete="off" /></label><label>Model<input value={configDraft.model} onChange={(event) => setConfigDraft((current) => ({ ...current, model: event.target.value }))} placeholder="例如 gpt-4o-mini" /></label>{configError ? <p className="chat-form-error" role="alert">{configError}</p> : null}{configNotice ? <p className="chat-form-notice" role="status">{configNotice}</p> : null}<div className="chat-config-actions"><button className="chat-secondary-button" type="button" onClick={clearConfig}>清空草稿</button><button className="chat-primary-button" type="submit">保存草稿</button></div></form>
+      </aside>
     </main>
   );
 }

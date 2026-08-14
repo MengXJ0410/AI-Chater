@@ -18,8 +18,9 @@ const timestamps = {
 
 export const users = mysqlTable("users", {
   id: varchar("id", { length: 36 }).primaryKey(),
-  username: varchar("username", { length: 32 }).notNull().unique(),
+  username: varchar("username", { length: 64 }).notNull().unique(),
   passwordHash: varchar("password_hash", { length: 255 }).notNull(),
+  deletedAt: datetime("deleted_at", { mode: "date" }),
   createdAt: timestamps.createdAt,
 });
 

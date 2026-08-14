@@ -3,6 +3,6 @@ import { AuthForm } from "@/components/auth-form";
 import { getCurrentUser } from "@/lib/auth";
 
 export default async function LoginPage() {
-  if (await getCurrentUser()) redirect("/chat");
+  if (await getCurrentUser()) redirect("/");
   return <AuthForm mode="login" />;
 }
