@@ -1,11 +1,13 @@
 import { z } from "zod";
 
-const providerSchema = z.enum(["openai", "openai-compatible", "xai", "anthropic", "google"]);
+export const aiProviderSchema = z.enum(["openai", "openai-compatible", "xai", "anthropic", "google"]);
+export type AiProvider = z.infer<typeof aiProviderSchema>;
+export const USER_AI_PRESET_ID = "user-config";
 
 const presetSchema = z.object({
   id: z.string().regex(/^[a-z0-9][a-z0-9-_]{0,63}$/),
   label: z.string().min(1).max(48),
-  provider: providerSchema,
+  provider: aiProviderSchema,
   model: z.string().min(1).max(160),
   apiKeyEnv: z.string().regex(/^[A-Z][A-Z0-9_]*$/),
   baseUrl: z.string().url().optional(),
@@ -24,6 +26,9 @@ export function getAiPresets(): AiPreset[] {
     const presets = z.array(presetSchema).min(1).parse(parsed);
     if (new Set(presets.map((preset) => preset.id)).size !== presets.length) {
       throw new Error("Preset ids must be unique.");
+    }
+    if (presets.some((preset) => preset.id === USER_AI_PRESET_ID)) {
+      throw new Error(`Preset id ${USER_AI_PRESET_ID} is reserved.`);
     }
     return presets;
   } catch (error) {

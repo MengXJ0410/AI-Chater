@@ -15,8 +15,8 @@ type AiPreset = { id: string; label: string; model: string; supportsImages: bool
 type PendingAttachment = { id: string; originalName: string };
 type ToolId = "chat" | "image" | "video" | "agent";
 type ConfigDraft = { provider: string; baseUrl: string; model: string };
+type SavedAiConfig = ConfigDraft & { apiKeyConfigured: true; apiKeyLast4: string };
 
-const CONFIG_STORAGE_KEY = "ai-chater-chat-config-v1";
 const SIDEBAR_STORAGE_KEY = "ai-chater-chat-sidebar-v1";
 const TOOL_ITEMS: Array<{ id: ToolId; label: string; description: string; icon: typeof Command }> = [
   { id: "chat", label: "对话", description: "与模型进行连续对话", icon: Command },
@@ -25,16 +25,7 @@ const TOOL_ITEMS: Array<{ id: ToolId; label: string; description: string; icon: 
   { id: "agent", label: "Agent", description: "组合工具完成任务", icon: WandSparkles },
 ];
 
-function readConfigDraft(): ConfigDraft {
-  const fallback = { provider: "openai-compatible", baseUrl: "", model: "" };
-  if (typeof window === "undefined") return fallback;
-  try {
-    const saved = JSON.parse(window.localStorage.getItem(CONFIG_STORAGE_KEY) ?? "null") as Partial<ConfigDraft> | null;
-    return saved ? { ...fallback, ...saved } : fallback;
-  } catch {
-    return fallback;
-  }
-}
+const DEFAULT_CONFIG_DRAFT: ConfigDraft = { provider: "openai-compatible", baseUrl: "", model: "" };
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
@@ -61,7 +52,7 @@ export function ChatClient({ user }: { user: User }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isAccountPanelOpen, setIsAccountPanelOpen] = useState(false);
   const [isConfigDrawerOpen, setIsConfigDrawerOpen] = useState(false);
-  const [configDraft, setConfigDraft] = useState<ConfigDraft>(readConfigDraft);
+  const [configDraft, setConfigDraft] = useState<ConfigDraft>(DEFAULT_CONFIG_DRAFT);
   const [apiKey, setApiKey] = useState("");
   const [configNotice, setConfigNotice] = useState("");
   const [configError, setConfigError] = useState("");
@@ -87,13 +78,18 @@ export function ChatClient({ user }: { user: User }) {
     let cancelled = false;
     async function initialize() {
       try {
-        const [conversationData, presetData] = await Promise.all([
+        const [conversationData, presetData, configData] = await Promise.all([
           requestJson<{ conversations: Conversation[] }>("/api/conversations"),
           requestJson<{ presets: AiPreset[] }>("/api/ai/presets"),
+          requestJson<{ config: SavedAiConfig | null }>("/api/me/ai-config"),
         ]);
         if (cancelled) return;
         setConversations(conversationData.conversations);
         setPresets(presetData.presets);
+        if (configData.config) {
+          setConfigDraft({ provider: configData.config.provider, baseUrl: configData.config.baseUrl, model: configData.config.model });
+          setConfigNotice(`已保存服务端配置，API Key 末四位：${configData.config.apiKeyLast4}`);
+        }
         const savedPreset = window.localStorage.getItem("ai-chater-preset");
         setPresetId(presetData.presets.some((preset) => preset.id === savedPreset) ? savedPreset! : presetData.presets[0]?.id ?? "");
       } catch (cause) {
@@ -298,33 +294,53 @@ export function ChatClient({ user }: { user: User }) {
     setIsSidebarOpen(false);
   }
 
-  function saveConfig(event: FormEvent<HTMLFormElement>) {
+  async function refreshPresets(selectedId?: string) {
+    const presetData = await requestJson<{ presets: AiPreset[] }>("/api/ai/presets");
+    setPresets(presetData.presets);
+    const nextPresetId = presetData.presets.some((preset) => preset.id === selectedId)
+      ? selectedId!
+      : presetData.presets[0]?.id ?? "";
+    setPresetId(nextPresetId);
+    window.localStorage.setItem("ai-chater-preset", nextPresetId);
+  }
+
+  async function saveConfig(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setConfigError("");
     setConfigNotice("");
-    if (configDraft.baseUrl && !/^https?:\/\//i.test(configDraft.baseUrl)) {
-      setConfigError("Base URL 需要以 http:// 或 https:// 开头。");
-      return;
+    try {
+      const payload = await requestJson<{ config: SavedAiConfig }>("/api/me/ai-config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...configDraft, ...(apiKey ? { apiKey } : {}) }),
+      });
+      setConfigDraft({ provider: payload.config.provider, baseUrl: payload.config.baseUrl, model: payload.config.model });
+      setApiKey("");
+      setConfigNotice(`已保存服务端配置，API Key 末四位：${payload.config.apiKeyLast4}`);
+      await refreshPresets("user-config");
+    } catch (cause) {
+      setConfigError(cause instanceof Error ? cause.message : "保存配置失败。");
     }
-    window.localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(configDraft));
-    setConfigNotice("已保存前端草稿，等待服务端接入。");
   }
 
-  function clearConfig() {
-    window.localStorage.removeItem(CONFIG_STORAGE_KEY);
-    setConfigDraft({ provider: "openai-compatible", baseUrl: "", model: "" });
-    setApiKey("");
-    setConfigNotice("已清空本地草稿。");
+  async function clearConfig() {
     setConfigError("");
+    try {
+      await requestJson("/api/me/ai-config", { method: "DELETE" });
+      setConfigDraft(DEFAULT_CONFIG_DRAFT);
+      setApiKey("");
+      setConfigNotice("已删除服务端模型配置。");
+      await refreshPresets();
+    } catch (cause) {
+      setConfigError(cause instanceof Error ? cause.message : "清空配置失败。");
+    }
   }
 
   function toggleChatBackground() {
-    setIsChatBackgroundEnabled((current) => {
-      const next = !current;
-      window.localStorage.setItem(CHAT_BACKGROUND_STORAGE_KEY, next ? "enabled" : "disabled");
-      window.dispatchEvent(new CustomEvent(CHAT_BACKGROUND_CHANGE_EVENT, { detail: { enabled: next } }));
-      return next;
-    });
+    const next = !isChatBackgroundEnabled;
+    setIsChatBackgroundEnabled(next);
+    window.localStorage.setItem(CHAT_BACKGROUND_STORAGE_KEY, next ? "enabled" : "disabled");
+    window.dispatchEvent(new CustomEvent(CHAT_BACKGROUND_CHANGE_EVENT, { detail: { enabled: next } }));
   }
 
   return (
@@ -336,8 +352,8 @@ export function ChatClient({ user }: { user: User }) {
           <button className="chat-icon-button chat-sidebar-toggle" title={isSidebarExpanded ? "收起工具栏" : "展开工具栏"} aria-label={isSidebarExpanded ? "收起工具栏" : "展开工具栏"} onClick={toggleSidebar}>{isSidebarExpanded ? <ChevronLeft size={17} /> : <ChevronRight size={17} />}</button>
         </div>
         <div className="chat-sidebar-scroll">
-          <button className="chat-config-entry" onClick={() => { setIsConfigDrawerOpen(true); setIsSidebarOpen(false); }} title="配置大模型">
-            <Settings2 size={18} /><span className="chat-sidebar-label">配置</span><span className="chat-config-status chat-sidebar-label">前端草稿</span>
+          <button className="chat-config-entry" onClick={() => { setIsConfigDrawerOpen((current) => !current); setIsAccountPanelOpen(false); setIsSidebarOpen(false); }} title="配置大模型" aria-expanded={isConfigDrawerOpen}>
+            <Settings2 size={18} /><span className="chat-sidebar-label">配置</span><span className="chat-config-status chat-sidebar-label">服务端配置</span>
           </button>
           <div className="chat-section-heading chat-sidebar-label">功能</div>
           <nav className="chat-tool-nav" aria-label="功能导航">
@@ -392,8 +408,8 @@ export function ChatClient({ user }: { user: User }) {
 
       <aside className={`chat-config-drawer ${isConfigDrawerOpen ? "is-open" : ""}`} aria-label="模型配置">
         <div className="chat-drawer-header"><div><span className="chat-tool-eyebrow">工作台配置</span><h2>连接你的模型</h2></div><button className="chat-icon-button" title="关闭配置" aria-label="关闭配置" onClick={() => setIsConfigDrawerOpen(false)}><X size={18} /></button></div>
-        <p className="chat-drawer-intro">这些字段目前只保存为前端草稿，正式连接需要服务端配置接口。</p>
-        <form className="chat-config-form" onSubmit={saveConfig}><label>Provider<select value={configDraft.provider} onChange={(event) => setConfigDraft((current) => ({ ...current, provider: event.target.value }))}><option value="openai-compatible">OpenAI Compatible</option><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option><option value="google">Google</option></select></label><label>Base URL<input type="url" value={configDraft.baseUrl} onChange={(event) => setConfigDraft((current) => ({ ...current, baseUrl: event.target.value }))} placeholder="https://api.example.com/v1" /></label><label>API Key<input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder="仅保存在当前页面" autoComplete="off" /></label><label>Model<input value={configDraft.model} onChange={(event) => setConfigDraft((current) => ({ ...current, model: event.target.value }))} placeholder="例如 gpt-4o-mini" /></label>{configError ? <p className="chat-form-error" role="alert">{configError}</p> : null}{configNotice ? <p className="chat-form-notice" role="status">{configNotice}</p> : null}<div className="chat-config-actions"><button className="chat-secondary-button" type="button" onClick={clearConfig}>清空草稿</button><button className="chat-primary-button" type="submit">保存草稿</button></div></form>
+        <p className="chat-drawer-intro">配置和密钥会加密保存在当前账号中。API Key 留空时保留已保存的密钥。</p>
+        <form className="chat-config-form" onSubmit={saveConfig}><label>Provider<select value={configDraft.provider} onChange={(event) => setConfigDraft((current) => ({ ...current, provider: event.target.value }))}><option value="openai-compatible">OpenAI Compatible</option><option value="openai">OpenAI</option><option value="xai">xAI</option><option value="anthropic">Anthropic</option><option value="google">Google</option></select></label><label>Base URL<input type="url" value={configDraft.baseUrl} onChange={(event) => setConfigDraft((current) => ({ ...current, baseUrl: event.target.value }))} placeholder="https://www.yyapi.cloud/v1" /></label><label>API Key<input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder="首次保存时必填" autoComplete="off" /></label><label>Model<input value={configDraft.model} onChange={(event) => setConfigDraft((current) => ({ ...current, model: event.target.value }))} placeholder="例如 gpt-4o-mini" /></label>{configError ? <p className="chat-form-error" role="alert">{configError}</p> : null}{configNotice ? <p className="chat-form-notice" role="status">{configNotice}</p> : null}<div className="chat-config-actions"><button className="chat-secondary-button" type="button" onClick={() => void clearConfig()}>删除配置</button><button className="chat-primary-button" type="submit">保存配置</button></div></form>
       </aside>
     </main>
   );

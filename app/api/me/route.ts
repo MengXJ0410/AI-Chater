@@ -4,7 +4,7 @@ import { createTombstoneUsername } from "@/lib/account";
 import { clearSessionCookie, getCurrentUser, requireUser, verifyPassword } from "@/lib/auth";
 import { routeError } from "@/lib/api";
 import { getDb } from "@/lib/db";
-import { sessions, users } from "@/lib/db/schema";
+import { sessions, userAiConfigs, users } from "@/lib/db/schema";
 import { assertSameOrigin, errorResponse } from "@/lib/http";
 import { deleteAccountSchema } from "@/lib/validators";
 
@@ -33,6 +33,7 @@ export async function DELETE(request: Request) {
       await tx.update(users).set({ username: tombstoneUsername, deletedAt: new Date() })
         .where(and(eq(users.id, user.id), isNull(users.deletedAt)));
       await tx.delete(sessions).where(eq(sessions.userId, user.id));
+      await tx.delete(userAiConfigs).where(eq(userAiConfigs.userId, user.id));
     });
     await clearSessionCookie();
     return NextResponse.json({ ok: true });

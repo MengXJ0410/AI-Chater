@@ -2,6 +2,14 @@
 
 本机运行的 AI 聊天工具，支持账号注册、会话管理、流式回复、多个模型预设和图片输入。
 
+## 后端技术栈
+
+- **Next.js Route Handlers + TypeScript**：提供登录、会话、聊天、上传和模型配置 API。
+- **MySQL + Drizzle ORM**：保存用户、登录会话、聊天记录、附件和用户模型配置；表结构通过 migration 管理。
+- **Argon2id + Cookie Session**：密码只保存哈希，会话令牌只保存摘要，浏览器使用 `HttpOnly` Cookie。
+- **Vercel AI SDK**：统一连接 OpenAI、Anthropic、Google、xAI 和兼容接口，并以流式方式返回模型回复。
+- **AES-256-GCM**：加密保存用户填写的模型 API Key，接口只返回是否已配置和末四位。
+
 ## 环境要求
 
 - Node.js 24+
@@ -25,6 +33,22 @@
    npm run dev
    ```
 4. 浏览器打开 `http://localhost:3000`，注册账号后即可使用。
+
+## 用户模型配置
+
+聊天工作台的“配置”抽屉可为当前账号保存一套模型连接。API Key 仅通过 HTTPS 请求提交，服务端使用 AES-256-GCM 加密保存，读取接口不会返回明文。
+
+在启用此功能前，为 `.env` 生成并填写 32 字节的加密主密钥：
+
+```powershell
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
+
+```env
+AI_CONFIG_ENCRYPTION_KEY=<generated-base64-key>
+```
+
+用户配置的云端 Base URL 必须是 HTTPS 公网域名；`openai-compatible` 允许 `http://localhost`、`http://127.0.0.1` 和 `http://[::1]` 连接本机模型。服务端会拒绝凭据、私网、链路本地和内部主机名，并禁止跟随重定向。API Key 轮换通过重新保存新 Key 完成；主密钥整体轮换需要后续迁移工具支持。
 
 ## 模型预设
 

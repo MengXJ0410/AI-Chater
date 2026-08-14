@@ -5,6 +5,7 @@ import {
   json,
   mysqlEnum,
   mysqlTable,
+  text,
   timestamp,
   varchar,
   bigint,
@@ -22,6 +23,19 @@ export const users = mysqlTable("users", {
   passwordHash: varchar("password_hash", { length: 255 }).notNull(),
   deletedAt: datetime("deleted_at", { mode: "date" }),
   createdAt: timestamps.createdAt,
+});
+
+export const userAiConfigs = mysqlTable("user_ai_configs", {
+  userId: varchar("user_id", { length: 36 }).primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  provider: mysqlEnum("provider", ["openai", "openai-compatible", "xai", "anthropic", "google"]).notNull(),
+  baseUrl: varchar("base_url", { length: 512 }),
+  model: varchar("model", { length: 160 }).notNull(),
+  apiKeyCiphertext: text("api_key_ciphertext").notNull(),
+  apiKeyIv: varchar("api_key_iv", { length: 32 }).notNull(),
+  apiKeyAuthTag: varchar("api_key_auth_tag", { length: 32 }).notNull(),
+  encryptionKeyId: varchar("encryption_key_id", { length: 64 }).notNull(),
+  apiKeyLast4: varchar("api_key_last4", { length: 4 }).notNull(),
+  ...timestamps,
 });
 
 export const sessions = mysqlTable("sessions", {

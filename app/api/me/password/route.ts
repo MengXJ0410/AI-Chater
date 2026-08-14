@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { clearSessionCookie, hashPassword, requireUser, verifyPassword } from "@/lib/auth";
 import { routeError } from "@/lib/api";
 import { getDb } from "@/lib/db";
-import { sessions, users } from "@/lib/db/schema";
+import { sessions, userAiConfigs, users } from "@/lib/db/schema";
 import { assertSameOrigin, errorResponse } from "@/lib/http";
 import { passwordChangeSchema } from "@/lib/validators";
 
@@ -22,6 +22,7 @@ export async function PATCH(request: Request) {
     await getDb().transaction(async (tx) => {
       await tx.update(users).set({ passwordHash }).where(and(eq(users.id, user.id), isNull(users.deletedAt)));
       await tx.delete(sessions).where(eq(sessions.userId, user.id));
+      await tx.delete(userAiConfigs).where(eq(userAiConfigs.userId, user.id));
     });
     await clearSessionCookie();
     return NextResponse.json({ ok: true });

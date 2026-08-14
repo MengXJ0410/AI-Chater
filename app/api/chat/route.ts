@@ -1,13 +1,14 @@
 import { randomUUID } from "crypto";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { streamText } from "ai";
-import { getLanguageModel, getPreset, toModelMessages } from "@/lib/ai";
+import { connectionFromPreset, getLanguageModel, getPreset, toModelMessages } from "@/lib/ai";
 import { requireUser } from "@/lib/auth";
 import { routeError } from "@/lib/api";
 import { getDb } from "@/lib/db";
 import { attachments, conversations, messages } from "@/lib/db/schema";
 import { assertSameOrigin, errorResponse } from "@/lib/http";
 import { chatSchema } from "@/lib/validators";
+import { getUserAiModelConfig, USER_AI_PRESET_ID } from "@/lib/user-ai-config";
 
 export const runtime = "nodejs";
 
@@ -20,9 +21,11 @@ export async function POST(request: Request) {
       .where(and(eq(conversations.id, conversationId), eq(conversations.userId, user.id))).limit(1);
     if (!conversation[0]) return errorResponse("会话不存在。", 404);
 
-    const preset = getPreset(presetId);
-    if (!preset) return errorResponse("所选模型预设不存在。", 404);
-    if (attachmentIds.length && !preset.supportsImages) return errorResponse("当前模型不支持图片输入。");
+    const systemPreset = getPreset(presetId);
+    const userConfig = presetId === USER_AI_PRESET_ID ? await getUserAiModelConfig(user.id) : null;
+    if (!systemPreset && !userConfig) return errorResponse("所选模型预设不存在。", 404);
+    if (attachmentIds.length && (!systemPreset || !systemPreset.supportsImages)) return errorResponse("当前模型不支持图片输入。");
+    const connection = userConfig ?? connectionFromPreset(systemPreset!);
 
     const uniqueAttachmentIds = [...new Set(attachmentIds)];
     const selectedAttachments = uniqueAttachmentIds.length
@@ -73,7 +76,7 @@ export async function POST(request: Request) {
     })));
 
     const result = streamText({
-      model: getLanguageModel(preset),
+      model: getLanguageModel(connection),
       messages: modelMessages,
       abortSignal: request.signal,
       onFinish: async ({ text: assistantText }) => {
@@ -83,8 +86,8 @@ export async function POST(request: Request) {
           conversationId,
           role: "assistant",
           parts: [{ type: "text", text: assistantText }],
-          presetId: preset.id,
-          model: preset.model,
+          presetId,
+          model: connection.model,
         });
         await getDb().update(conversations).set({ updatedAt: new Date() }).where(eq(conversations.id, conversationId));
       },

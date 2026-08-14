@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { aiProviderSchema } from "@/lib/config";
 
 const passwordSchema = z.string().min(8, "密码至少需要 8 位。").max(128, "密码不能超过 128 位。");
 
@@ -14,6 +15,13 @@ export const passwordChangeSchema = z.object({
 
 export const deleteAccountSchema = z.object({
   password: passwordSchema,
+});
+
+export const userAiConfigSchema = z.object({
+  provider: aiProviderSchema,
+  baseUrl: z.string().trim().max(512).default(""),
+  model: z.string().trim().min(1, "请输入模型名称。").max(160, "模型名称不能超过 160 个字符。"),
+  apiKey: z.string().trim().min(1, "请输入 API Key。").max(4096, "API Key 不能超过 4096 个字符。").optional(),
 });
 
 export function normalizeUsername(username: string) {

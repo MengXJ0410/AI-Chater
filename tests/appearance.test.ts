@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_ACCENT, darkerColor, defaultAppearance, deriveAccentTheme, deriveBubbleColor, parseAppearance } from "@/lib/appearance";
+import { DEFAULT_ACCENT, darkerColor, defaultAppearance, deriveAccentTheme, deriveBubbleColor, getAppearancePanelVisibility, parseAppearance } from "@/lib/appearance";
 
 describe("appearance preferences", () => {
   it("uses defaults for missing or invalid saved data", () => {
@@ -54,5 +54,13 @@ describe("appearance preferences", () => {
     const factors = { redFactor: -0.5, greenFactor: 1, blueFactor: -0.25 };
     expect(deriveBubbleColor("#64c864", factors, 30).primary).toBe("#55e65d");
     expect(deriveBubbleColor("#64c864", factors, 60).primary).toBe("#46ff55");
+  });
+
+  it("shows only relevant controls for each page context", () => {
+    expect(getAppearancePanelVisibility("/", false)).toEqual({ showBubbleControls: true, showBackgroundControls: true });
+    expect(getAppearancePanelVisibility("/chat", true)).toEqual({ showBubbleControls: false, showBackgroundControls: true });
+    expect(getAppearancePanelVisibility("/chat", false)).toEqual({ showBubbleControls: false, showBackgroundControls: false });
+    expect(getAppearancePanelVisibility("/login", true)).toEqual({ showBubbleControls: false, showBackgroundControls: false });
+    expect(getAppearancePanelVisibility("/settings", true)).toEqual({ showBubbleControls: false, showBackgroundControls: false });
   });
 });

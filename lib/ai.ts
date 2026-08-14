@@ -4,13 +4,31 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createXai } from "@ai-sdk/xai";
 import type { LanguageModel, ModelMessage } from "ai";
-import { getAiPresets, type AiPreset } from "@/lib/config";
+import { getAiPresets, type AiPreset, type AiProvider } from "@/lib/config";
 import { readImage } from "@/lib/uploads";
 import type { MessagePart } from "@/lib/messages";
+import { assertSafeResolvedRequestUrl } from "@/lib/user-ai-config";
 
 export function getPreset(id: string) {
   return getAiPresets().find((preset) => preset.id === id);
 }
+
+export type ModelConnection = {
+  provider: AiProvider;
+  baseUrl?: string;
+  model: string;
+  apiKey: string;
+};
+
+type ProviderAdapter = {
+  create: (connection: ModelConnection) => LanguageModel;
+};
+
+const guardedFetch: typeof fetch = async (input, init) => {
+  const requestUrl = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+  await assertSafeResolvedRequestUrl(requestUrl);
+  return fetch(input, { ...init, redirect: "error" });
+};
 
 function apiKeyFor(preset: AiPreset) {
   const key = process.env[preset.apiKeyEnv];
@@ -18,21 +36,33 @@ function apiKeyFor(preset: AiPreset) {
   return key;
 }
 
-export function getLanguageModel(preset: AiPreset): LanguageModel {
-  const apiKey = apiKeyFor(preset);
-  switch (preset.provider) {
-    case "openai":
-      return createOpenAI({ apiKey, baseURL: preset.baseUrl })(preset.model);
-    case "openai-compatible":
-      if (!preset.baseUrl) throw new Error("OpenAI-compatible 预设需要配置 baseUrl。");
-      return createOpenAICompatible({ name: "configured-compatible", apiKey, baseURL: preset.baseUrl })(preset.model);
-    case "xai":
-      return createXai({ apiKey, baseURL: preset.baseUrl })(preset.model);
-    case "anthropic":
-      return createAnthropic({ apiKey, baseURL: preset.baseUrl })(preset.model);
-    case "google":
-      return createGoogle({ apiKey, baseURL: preset.baseUrl })(preset.model);
-  }
+export function connectionFromPreset(preset: AiPreset): ModelConnection {
+  return { provider: preset.provider, baseUrl: preset.baseUrl, model: preset.model, apiKey: apiKeyFor(preset) };
+}
+
+const providerAdapters: Record<AiProvider, ProviderAdapter> = {
+  openai: {
+    create: (connection) => createOpenAI({ apiKey: connection.apiKey, baseURL: connection.baseUrl, fetch: guardedFetch })(connection.model),
+  },
+  "openai-compatible": {
+    create: (connection) => {
+      if (!connection.baseUrl) throw new Error("OpenAI-compatible 预设需要配置 baseUrl。");
+      return createOpenAICompatible({ name: "configured-compatible", apiKey: connection.apiKey, baseURL: connection.baseUrl, fetch: guardedFetch })(connection.model);
+    },
+  },
+  xai: {
+    create: (connection) => createXai({ apiKey: connection.apiKey, baseURL: connection.baseUrl, fetch: guardedFetch })(connection.model),
+  },
+  anthropic: {
+    create: (connection) => createAnthropic({ apiKey: connection.apiKey, baseURL: connection.baseUrl, fetch: guardedFetch })(connection.model),
+  },
+  google: {
+    create: (connection) => createGoogle({ apiKey: connection.apiKey, baseURL: connection.baseUrl, fetch: guardedFetch })(connection.model),
+  },
+};
+
+export function getLanguageModel(connection: ModelConnection): LanguageModel {
+  return providerAdapters[connection.provider].create(connection);
 }
 
 export async function toModelMessages(rows: Array<{ role: "user" | "assistant"; parts: MessagePart[]; mimeTypes?: Map<string, string>; storageKeys?: Map<string, string> }>): Promise<ModelMessage[]> {
