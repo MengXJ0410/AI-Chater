@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { streamText } from "ai";
-import { connectionFromPreset, getLanguageModel, getPreset, toModelMessages } from "@/lib/ai";
+import { connectionFromPreset, getLanguageModel, getPreset, modelStreamErrorHandler, toModelMessages } from "@/lib/ai";
 import { requireUser } from "@/lib/auth";
 import { routeError } from "@/lib/api";
 import { getDb } from "@/lib/db";
@@ -79,6 +79,7 @@ export async function POST(request: Request) {
       model: getLanguageModel(connection),
       messages: modelMessages,
       abortSignal: request.signal,
+      onError: modelStreamErrorHandler,
       onFinish: async ({ text: assistantText }) => {
         if (!assistantText.trim()) return;
         await getDb().insert(messages).values({

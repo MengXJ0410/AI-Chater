@@ -7,6 +7,7 @@ import {
   mysqlTable,
   text,
   timestamp,
+  uniqueIndex,
   varchar,
   bigint,
 } from "drizzle-orm/mysql-core";
@@ -22,13 +23,32 @@ export const users = mysqlTable("users", {
   username: varchar("username", { length: 64 }).notNull().unique(),
   passwordHash: varchar("password_hash", { length: 255 }).notNull(),
   deletedAt: datetime("deleted_at", { mode: "date" }),
+  avatarStorageKey: varchar("avatar_storage_key", { length: 80 }),
+  avatarMimeType: varchar("avatar_mime_type", { length: 80 }),
+  avatarUpdatedAt: datetime("avatar_updated_at", { mode: "date" }),
   createdAt: timestamps.createdAt,
 });
 
 export const userAiConfigs = mysqlTable("user_ai_configs", {
   userId: varchar("user_id", { length: 36 }).primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  presetId: varchar("preset_id", { length: 64 }),
+  name: varchar("name", { length: 80 }),
   provider: mysqlEnum("provider", ["openai", "openai-compatible", "xai", "anthropic", "google"]).notNull(),
   baseUrl: varchar("base_url", { length: 512 }),
+  model: varchar("model", { length: 160 }).notNull(),
+  apiKeyCiphertext: text("api_key_ciphertext").notNull(),
+  apiKeyIv: varchar("api_key_iv", { length: 32 }).notNull(),
+  apiKeyAuthTag: varchar("api_key_auth_tag", { length: 32 }).notNull(),
+  encryptionKeyId: varchar("encryption_key_id", { length: 64 }).notNull(),
+  apiKeyLast4: varchar("api_key_last4", { length: 4 }).notNull(),
+  ...timestamps,
+});
+
+export const userImageConfigs = mysqlTable("user_image_configs", {
+  userId: varchar("user_id", { length: 36 }).primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 80 }).notNull(),
+  provider: mysqlEnum("provider", ["xai-compatible", "openai-compatible"]).notNull(),
+  baseUrl: varchar("base_url", { length: 512 }).notNull(),
   model: varchar("model", { length: 160 }).notNull(),
   apiKeyCiphertext: text("api_key_ciphertext").notNull(),
   apiKeyIv: varchar("api_key_iv", { length: 32 }).notNull(),
@@ -63,6 +83,33 @@ export const messages = mysqlTable("messages", {
   createdAt: timestamps.createdAt,
 }, (table) => [index("messages_conversation_created_idx").on(table.conversationId, table.createdAt)]);
 
+export const imageGenerations = mysqlTable("image_generations", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  requestId: varchar("request_id", { length: 36 }).notNull(),
+  requestHash: varchar("request_hash", { length: 64 }).notNull(),
+  userId: varchar("user_id", { length: 36 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  conversationId: varchar("conversation_id", { length: 36 }).notNull().references(() => conversations.id, { onDelete: "cascade" }),
+  userMessageId: varchar("user_message_id", { length: 36 }).notNull().references(() => messages.id, { onDelete: "cascade" }),
+  assistantMessageId: varchar("assistant_message_id", { length: 36 }),
+  imagePresetId: varchar("image_preset_id", { length: 64 }).notNull(),
+  provider: mysqlEnum("provider", ["xai-compatible", "openai-compatible"]).notNull(),
+  model: varchar("model", { length: 160 }).notNull(),
+  prompt: text("prompt").notNull(),
+  aspectRatio: varchar("aspect_ratio", { length: 16 }).notNull(),
+  resolution: mysqlEnum("resolution", ["1k", "2k"]).notNull(),
+  quality: mysqlEnum("quality", ["low", "medium", "high"]).notNull(),
+  source: mysqlEnum("source", ["image-mode"]).notNull(),
+  status: mysqlEnum("status", ["queued", "running", "cancel_requested", "completed", "failed", "cancelled"]).notNull(),
+  errorCode: varchar("error_code", { length: 64 }),
+  startedAt: datetime("started_at", { mode: "date" }),
+  completedAt: datetime("completed_at", { mode: "date" }),
+  ...timestamps,
+}, (table) => [
+  index("image_generations_user_created_idx").on(table.userId, table.createdAt),
+  index("image_generations_queue_idx").on(table.status, table.createdAt),
+  uniqueIndex("image_generations_user_request_unique").on(table.userId, table.requestId),
+]);
+
 export const attachments = mysqlTable("attachments", {
   id: varchar("id", { length: 36 }).primaryKey(),
   userId: varchar("user_id", { length: 36 }).notNull().references(() => users.id, { onDelete: "cascade" }),
@@ -71,8 +118,11 @@ export const attachments = mysqlTable("attachments", {
   mimeType: varchar("mime_type", { length: 80 }).notNull(),
   size: bigint("size", { mode: "number", unsigned: true }).notNull(),
   originalName: varchar("original_name", { length: 255 }).notNull(),
+  generationId: varchar("generation_id", { length: 36 }),
+  origin: mysqlEnum("origin", ["upload", "generated"]).notNull().default("upload"),
   createdAt: timestamps.createdAt,
 }, (table) => [
   index("attachments_user_id_idx").on(table.userId),
   index("attachments_message_id_idx").on(table.messageId),
+  index("attachments_generation_id_idx").on(table.generationId),
 ]);

@@ -2,20 +2,29 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bot, ChevronLeft, ChevronRight, Command, FileImage, ImagePlus, LayoutPanelLeft, LoaderCircle, LogOut, Menu, MessageSquarePlus, MoreHorizontal, Pencil, SendHorizontal, Settings2, Sparkles, Square, Trash2, Video, WandSparkles, X } from "lucide-react";
+import { Bot, ChevronLeft, ChevronRight, Command, FileImage, LayoutPanelLeft, LoaderCircle, LogOut, Menu, MessageSquarePlus, MoreHorizontal, Paperclip, Pencil, PlugZap, SendHorizontal, Settings2, Sparkles, Square, Trash2, UserRound, Video, WandSparkles, X } from "lucide-react";
 import { Markdown } from "@/components/markdown";
+import { ChatAmbientLayer } from "@/components/chat-ambient-layer";
+import { UserAvatar } from "@/components/user-avatar";
+import { ImageWorkspace } from "@/components/image-workspace";
 import { CHAT_BACKGROUND_CHANGE_EVENT, CHAT_BACKGROUND_STORAGE_KEY } from "@/lib/appearance";
+import { CHAT_ENTRY_READY_EVENT, CHAT_ENTRY_STORAGE_KEY, isPendingChatEntry } from "@/lib/chat-entry-transition";
+import { appendStreamText, getGenerationLabel, type GenerationStatus } from "@/lib/chat-message";
+import { getFollowScrollTop, isNearScrollBottom } from "@/lib/chat-ambient";
 import type { MessagePart } from "@/lib/messages";
 
-type User = { id: string; username: string };
+type User = { id: string; username: string; avatarUrl?: string | null };
 type Conversation = { id: string; title: string; createdAt: string; updatedAt: string };
-type ChatMessage = { id: string; role: "user" | "assistant"; parts: MessagePart[]; presetId: string | null; model: string | null; createdAt: string };
+type ChatMessage = { id: string; role: "user" | "assistant"; parts: MessagePart[]; presetId: string | null; model: string | null; createdAt: string; status?: GenerationStatus };
 type AiPreset = { id: string; label: string; model: string; supportsImages: boolean };
+type ConnectionPreset = { id: string; label: string; provider: string; baseUrl: string; model: string; readOnly?: boolean };
+type CustomDraft = { provider: "openai" | "openai-compatible" | "xai" | "anthropic" | "google"; baseUrl: string; model: string };
 type PendingAttachment = { id: string; originalName: string };
 type ToolId = "chat" | "image" | "video" | "agent";
-type ConfigDraft = { provider: string; baseUrl: string; model: string };
-type SavedAiConfig = ConfigDraft & { apiKeyConfigured: true; apiKeyLast4: string };
+type SavedAiConfig = ConnectionPreset & { presetId: string; apiKeyConfigured: true; apiKeyLast4: string };
+type ImageConfigDraft = { name: string; provider: "xai-compatible" | "openai-compatible"; baseUrl: string; model: string };
 
 const SIDEBAR_STORAGE_KEY = "ai-chater-chat-sidebar-v1";
 const TOOL_ITEMS: Array<{ id: ToolId; label: string; description: string; icon: typeof Command }> = [
@@ -24,8 +33,6 @@ const TOOL_ITEMS: Array<{ id: ToolId; label: string; description: string; icon: 
   { id: "video", label: "视频", description: "生成和编辑视频", icon: Video },
   { id: "agent", label: "Agent", description: "组合工具完成任务", icon: WandSparkles },
 ];
-
-const DEFAULT_CONFIG_DRAFT: ConfigDraft = { provider: "openai-compatible", baseUrl: "", model: "" };
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
@@ -47,21 +54,66 @@ export function ChatClient({ user }: { user: User }) {
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState("");
   const [activeTool, setActiveTool] = useState<ToolId>("chat");
-  const [isSidebarExpanded, setIsSidebarExpanded] = useState(() => typeof window === "undefined" || window.localStorage.getItem(SIDEBAR_STORAGE_KEY) !== "collapsed");
-  const [isChatBackgroundEnabled, setIsChatBackgroundEnabled] = useState(() => typeof window !== "undefined" && window.localStorage.getItem(CHAT_BACKGROUND_STORAGE_KEY) === "enabled");
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
+  const [isChatBackgroundEnabled, setIsChatBackgroundEnabled] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isAccountPanelOpen, setIsAccountPanelOpen] = useState(false);
   const [isConfigDrawerOpen, setIsConfigDrawerOpen] = useState(false);
-  const [configDraft, setConfigDraft] = useState<ConfigDraft>(DEFAULT_CONFIG_DRAFT);
+  const [isEntering, setIsEntering] = useState(false);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const [connectionPresets, setConnectionPresets] = useState<ConnectionPreset[]>([]);
+  const [connectionPresetId, setConnectionPresetId] = useState("");
+  const [customDraft, setCustomDraft] = useState<CustomDraft>({ provider: "openai-compatible", baseUrl: "", model: "" });
   const [apiKey, setApiKey] = useState("");
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [configNotice, setConfigNotice] = useState("");
   const [configError, setConfigError] = useState("");
+  const [configTab, setConfigTab] = useState<"chat" | "image">("chat");
+  const [imageConfigDraft, setImageConfigDraft] = useState<ImageConfigDraft>({ name: "我的生图模型", provider: "xai-compatible", baseUrl: "", model: "" });
+  const [imageApiKey, setImageApiKey] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
+  const shouldFollowMessagesRef = useRef(true);
+  const loadingConversationRef = useRef(0);
+
+  useEffect(() => {
+    const tool = new URLSearchParams(window.location.search).get("tool");
+    if (tool === "image" || tool === "video" || tool === "agent" || tool === "chat") void Promise.resolve().then(() => setActiveTool(tool));
+  }, []);
+
+  useEffect(() => {
+    if (!isConfigDrawerOpen || configTab !== "image") return;
+    let cancelled = false;
+    void requestJson<{ config?: ImageConfigDraft | null }>("/api/me/image-config")
+      .then((data) => { if (!cancelled && data.config) setImageConfigDraft(data.config); })
+      .catch((cause) => { if (!cancelled) setConfigNotice(cause instanceof Error ? cause.message : "生图配置服务尚未接入。"); });
+    return () => { cancelled = true; };
+  }, [configTab, isConfigDrawerOpen]);
+
+  useEffect(() => {
+    void Promise.resolve().then(() => {
+      setIsSidebarExpanded(window.localStorage.getItem(SIDEBAR_STORAGE_KEY) !== "collapsed");
+      setIsChatBackgroundEnabled(window.localStorage.getItem(CHAT_BACKGROUND_STORAGE_KEY) === "enabled");
+    });
+  }, []);
+
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const entryToken = window.sessionStorage.getItem(CHAT_ENTRY_STORAGE_KEY);
+    if (!isPendingChatEntry(entryToken)) return;
+    window.sessionStorage.removeItem(CHAT_ENTRY_STORAGE_KEY);
+    void Promise.resolve().then(() => {
+      setIsEntering(true);
+      window.dispatchEvent(new Event(CHAT_ENTRY_READY_EVENT));
+      window.setTimeout(() => setIsEntering(false), 460);
+    });
+  }, []);
 
   const activeConversation = conversations.find((item) => item.id === activeConversationId) ?? null;
   const selectedPreset = presets.find((preset) => preset.id === presetId);
+  const selectedConnectionPreset = connectionPresets.find((preset) => preset.id === connectionPresetId);
+  const isCustomConnection = connectionPresetId === "custom";
   const activeToolMeta = TOOL_ITEMS.find((item) => item.id === activeTool) ?? TOOL_ITEMS[0];
 
   const loadConversations = useCallback(async () => {
@@ -75,23 +127,43 @@ export function ChatClient({ user }: { user: User }) {
   }, []);
 
   useEffect(() => {
+    const list = messageListRef.current;
+    if (!list) return;
+    const handleScroll = () => {
+      const nearBottom = isNearScrollBottom(list.scrollTop, list.clientHeight, list.scrollHeight);
+      shouldFollowMessagesRef.current = nearBottom;
+      setShowScrollToBottom(!nearBottom && isSending);
+    };
+    handleScroll();
+    list.addEventListener("scroll", handleScroll, { passive: true });
+    return () => list.removeEventListener("scroll", handleScroll);
+  }, [isSending]);
+
+  useEffect(() => {
     let cancelled = false;
     async function initialize() {
       try {
         const [conversationData, presetData, configData] = await Promise.all([
           requestJson<{ conversations: Conversation[] }>("/api/conversations"),
           requestJson<{ presets: AiPreset[] }>("/api/ai/presets"),
-          requestJson<{ config: SavedAiConfig | null }>("/api/me/ai-config"),
+          requestJson<{ config: SavedAiConfig | null; presets: ConnectionPreset[] }>("/api/me/ai-config"),
         ]);
         if (cancelled) return;
         setConversations(conversationData.conversations);
         setPresets(presetData.presets);
+        setConnectionPresets(configData.presets);
         if (configData.config) {
-          setConfigDraft({ provider: configData.config.provider, baseUrl: configData.config.baseUrl, model: configData.config.model });
+          setConnectionPresetId(configData.config.presetId);
+          if (configData.config.presetId === "custom") {
+            setCustomDraft({ provider: configData.config.provider as CustomDraft["provider"], baseUrl: configData.config.baseUrl, model: configData.config.model });
+          }
           setConfigNotice(`已保存服务端配置，API Key 末四位：${configData.config.apiKeyLast4}`);
+          setPresetId(presetData.presets.some((preset) => preset.id === "user-config") ? "user-config" : presetData.presets[0]?.id ?? "");
+          return;
         }
         const savedPreset = window.localStorage.getItem("ai-chater-preset");
         setPresetId(presetData.presets.some((preset) => preset.id === savedPreset) ? savedPreset! : presetData.presets[0]?.id ?? "");
+        setConnectionPresetId(configData.presets[0]?.id ?? "");
       } catch (cause) {
         if (!cancelled) setError(cause instanceof Error ? cause.message : "加载失败。");
       }
@@ -102,6 +174,7 @@ export function ChatClient({ user }: { user: User }) {
 
   useEffect(() => {
     let cancelled = false;
+    const requestId = ++loadingConversationRef.current;
     async function loadSelectedConversation() {
       if (!activeConversationId) {
         setMessages([]);
@@ -109,17 +182,19 @@ export function ChatClient({ user }: { user: User }) {
       }
       try {
         const data = await requestJson<{ conversation: Conversation; messages: ChatMessage[] }>(`/api/conversations/${activeConversationId}`);
-        if (!cancelled) setMessages(data.messages);
+        if (!cancelled && requestId === loadingConversationRef.current && !isSending) setMessages(data.messages);
       } catch (cause) {
         if (!cancelled) setError(cause instanceof Error ? cause.message : "加载会话失败。");
       }
     }
     void loadSelectedConversation();
     return () => { cancelled = true; };
-  }, [activeConversationId, loadConversation]);
+  }, [activeConversationId, isSending, loadConversation]);
 
   useEffect(() => {
-    messageListRef.current?.scrollTo({ top: messageListRef.current.scrollHeight, behavior: "smooth" });
+    const list = messageListRef.current;
+    if (!list || !shouldFollowMessagesRef.current) return;
+    list.scrollTop = getFollowScrollTop(list.scrollHeight, list.clientHeight);
   }, [messages, isSending]);
 
   async function createConversation() {
@@ -190,6 +265,7 @@ export function ChatClient({ user }: { user: User }) {
       presetId: null,
       model: null,
       createdAt: new Date().toISOString(),
+      status: "complete",
     };
     const optimisticAssistantId = `pending-assistant-${Date.now()}`;
     setMessages((current) => [...current, optimisticUser, {
@@ -199,7 +275,13 @@ export function ChatClient({ user }: { user: User }) {
       presetId,
       model: selectedPreset?.model ?? null,
       createdAt: new Date().toISOString(),
+      status: "thinking",
     }]);
+    shouldFollowMessagesRef.current = true;
+    window.requestAnimationFrame(() => {
+      const list = messageListRef.current;
+      if (list) list.scrollTop = getFollowScrollTop(list.scrollHeight, list.clientHeight);
+    });
 
     let conversationId = activeConversationId;
     try {
@@ -222,21 +304,29 @@ export function ChatClient({ user }: { user: User }) {
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
-        answer += decoder.decode(value, { stream: true });
+        answer = appendStreamText(answer, decoder.decode(value, { stream: true }));
         setMessages((current) => current.map((message) => message.id === optimisticAssistantId
-          ? { ...message, parts: [{ type: "text", text: answer }] }
+          ? { ...message, status: "streaming", parts: [{ type: "text", text: answer }] }
           : message));
       }
-      answer += decoder.decode();
+      answer = appendStreamText(answer, decoder.decode());
+      setMessages((current) => current.map((message) => message.id === optimisticAssistantId
+        ? { ...message, status: "complete", parts: [{ type: "text", text: answer }] }
+        : message));
     } catch (cause) {
       if (!(cause instanceof DOMException && cause.name === "AbortError")) {
         setError(cause instanceof Error ? cause.message : "模型请求失败。");
       }
+      setMessages((current) => current.map((message) => message.id === optimisticAssistantId
+        ? { ...message, status: "error" }
+        : message));
     } finally {
       abortControllerRef.current = null;
       setIsSending(false);
       if (conversationId) {
-        await Promise.all([loadConversation(conversationId), loadConversations()]).catch(() => undefined);
+        if (conversationId === activeConversationId || !activeConversationId) {
+          await Promise.all([loadConversation(conversationId), loadConversations()]).catch(() => undefined);
+        }
       } else {
         setMessages((current) => current.filter((message) => !message.id.startsWith("pending-")));
       }
@@ -291,7 +381,28 @@ export function ChatClient({ user }: { user: User }) {
 
   function selectTool(tool: ToolId) {
     setActiveTool(tool);
+    router.replace(tool === "chat" ? "/chat" : `/chat?tool=${tool}`, { scroll: false });
     setIsSidebarOpen(false);
+  }
+
+  async function saveImageConfig(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setConfigError(""); setConfigNotice("");
+    try {
+      await requestJson("/api/me/image-config", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...imageConfigDraft, ...(imageApiKey ? { apiKey: imageApiKey } : {}) }) });
+      setImageApiKey(""); setConfigNotice("已保存生图配置。");
+    } catch (cause) { setConfigError(cause instanceof Error ? cause.message : "生图配置服务尚未接入。"); }
+  }
+
+  async function testImageConfig() {
+    setConfigError(""); setConfigNotice("测试生图连接可能会真实生成图片并产生费用。");
+    try { await requestJson("/api/me/image-config/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...imageConfigDraft, ...(imageApiKey ? { apiKey: imageApiKey } : {}) }) }); setConfigNotice("生图连接测试成功。"); }
+    catch (cause) { setConfigError(cause instanceof Error ? cause.message : "生图配置服务尚未接入。"); }
+  }
+
+  async function clearImageConfig() {
+    setConfigError("");
+    try { await requestJson("/api/me/image-config", { method: "DELETE" }); setImageApiKey(""); setImageConfigDraft({ name: "我的生图模型", provider: "xai-compatible", baseUrl: "", model: "" }); setConfigNotice("已删除生图配置。"); }
+    catch (cause) { setConfigError(cause instanceof Error ? cause.message : "生图配置服务尚未接入。"); }
   }
 
   async function refreshPresets(selectedId?: string) {
@@ -312,9 +423,13 @@ export function ChatClient({ user }: { user: User }) {
       const payload = await requestJson<{ config: SavedAiConfig }>("/api/me/ai-config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...configDraft, ...(apiKey ? { apiKey } : {}) }),
+        body: JSON.stringify(getConfigPayload()),
       });
-      setConfigDraft({ provider: payload.config.provider, baseUrl: payload.config.baseUrl, model: payload.config.model });
+      setConnectionPresetId(payload.config.presetId);
+      if (payload.config.presetId === "custom") {
+        setCustomDraft({ provider: payload.config.provider as CustomDraft["provider"], baseUrl: payload.config.baseUrl, model: payload.config.model });
+      }
+      setConnectionPresets((current) => current.filter((preset) => !preset.readOnly));
       setApiKey("");
       setConfigNotice(`已保存服务端配置，API Key 末四位：${payload.config.apiKeyLast4}`);
       await refreshPresets("user-config");
@@ -323,11 +438,36 @@ export function ChatClient({ user }: { user: User }) {
     }
   }
 
+  function getConfigPayload() {
+    return { presetId: connectionPresetId, ...(connectionPresetId === "custom" ? customDraft : {}), ...(apiKey ? { apiKey } : {}) };
+  }
+
+  async function testConfig() {
+    if (isTestingConnection || isSending) return;
+    setConfigError("");
+    setConfigNotice("");
+    setIsTestingConnection(true);
+    try {
+      const result = await requestJson<{ ok: true; model: string }>("/api/me/ai-config/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(getConfigPayload()),
+      });
+      setConfigNotice(`连接测试成功，可以保存配置（${result.model}）`);
+    } catch (cause) {
+      setConfigError(cause instanceof Error ? cause.message : "连接测试失败，请检查 API Key、Base URL 和 Model。");
+    } finally {
+      setIsTestingConnection(false);
+    }
+  }
+
   async function clearConfig() {
     setConfigError("");
     try {
       await requestJson("/api/me/ai-config", { method: "DELETE" });
-      setConfigDraft(DEFAULT_CONFIG_DRAFT);
+      setConnectionPresetId(connectionPresets[0]?.id ?? "");
+      setCustomDraft({ provider: "openai-compatible", baseUrl: "", model: "" });
+      setConnectionPresets((current) => current.filter((preset) => !preset.readOnly));
       setApiKey("");
       setConfigNotice("已删除服务端模型配置。");
       await refreshPresets();
@@ -344,7 +484,8 @@ export function ChatClient({ user }: { user: User }) {
   }
 
   return (
-    <main className={`chat-app ${isChatBackgroundEnabled ? "has-background" : ""}`}>
+    <main className={`chat-app ${isChatBackgroundEnabled ? "has-background" : ""} ${isEntering ? "is-entering" : ""}`}>
+      <ChatAmbientLayer />
       <div className={`chat-mobile-scrim ${isSidebarOpen || isAccountPanelOpen || isConfigDrawerOpen ? "is-visible" : ""}`} onClick={() => { setIsSidebarOpen(false); setIsAccountPanelOpen(false); setIsConfigDrawerOpen(false); }} aria-hidden="true" />
       <aside className={`chat-sidebar ${isSidebarExpanded ? "is-expanded" : "is-collapsed"} ${isSidebarOpen ? "is-mobile-open" : ""}`}>
         <div className="chat-sidebar-header">
@@ -374,7 +515,7 @@ export function ChatClient({ user }: { user: User }) {
             <span className="chat-sidebar-label">开启背景图</span>
           </label>
           <div className="chat-user-footer">
-          <div className="chat-avatar">{user.username.slice(0, 1).toUpperCase()}</div><span className="chat-sidebar-label chat-user-name">{user.username}</span>
+          <UserAvatar className="chat-avatar" username={user.username} src={user.avatarUrl} /><span className="chat-sidebar-label chat-user-name">{user.username}</span>
           <button className="chat-icon-button" title="退出登录" aria-label="退出登录" onClick={logout}><LogOut size={17} /></button>
           </div>
         </div>
@@ -383,48 +524,60 @@ export function ChatClient({ user }: { user: User }) {
       <section className="chat-main">
         <header className="chat-toolbar">
           <div className="chat-toolbar-leading"><button className="chat-icon-button chat-mobile-menu" title="打开工具栏" aria-label="打开工具栏" onClick={() => setIsSidebarOpen(true)}><Menu size={19} /></button><div className="chat-tool-heading"><span className="chat-tool-eyebrow">{activeToolMeta.label}</span><h1>{activeTool === "chat" ? (activeConversation?.title ?? "新对话") : activeToolMeta.description}</h1></div>{activeTool === "chat" && activeConversation ? <button className="chat-icon-button" title="重命名会话" aria-label="重命名会话" onClick={renameConversation}><Pencil size={15} /></button> : null}</div>
-          <div className="chat-toolbar-actions"><select className="model-select" value={presetId} onChange={(event) => choosePreset(event.target.value)} disabled={activeTool !== "chat" || !presets.length || isSending}>{presets.length ? presets.map((preset) => <option value={preset.id} key={preset.id}>{preset.label} · {preset.model}</option>) : <option value="">未配置模型</option>}</select><button className="chat-account-trigger" title="账号面板" aria-label="打开账号面板" aria-expanded={isAccountPanelOpen} onClick={() => setIsAccountPanelOpen((current) => !current)}><span className="chat-avatar">{user.username.slice(0, 1).toUpperCase()}</span><span className="chat-account-trigger-name">{user.username}</span></button></div>
+          <div className="chat-toolbar-actions">{activeTool === "chat" ? <select className="model-select" value={presetId} onChange={(event) => choosePreset(event.target.value)} disabled={!presets.length || isSending}>{presets.length ? presets.map((preset) => <option value={preset.id} key={preset.id}>{preset.label} · {preset.model}</option>) : <option value="">未配置模型</option>}</select> : null}<button className="chat-account-trigger" title="账号面板" aria-label="打开账号面板" aria-expanded={isAccountPanelOpen} onClick={() => setIsAccountPanelOpen((current) => !current)}><UserAvatar className="chat-avatar" username={user.username} src={user.avatarUrl} /><span className="chat-account-trigger-name">{user.username}</span></button></div>
         </header>
 
-        {activeTool !== "chat" ? <div className="chat-placeholder"><div className="chat-placeholder-icon"><MoreHorizontal size={26} /></div><span className="chat-tool-eyebrow">{activeToolMeta.label}</span><h2>{activeToolMeta.description}</h2><p>这个功能正在准备中，之后会在这里成为你的新工作窗口。</p><button className="chat-primary-button" onClick={() => selectTool("chat")}><Command size={16} />返回对话</button></div> : <div className="chat-conversation-workspace">
+        {activeTool === "image" ? <ImageWorkspace conversationId={activeConversationId} ensureConversation={async () => activeConversationId ?? createConversation()} onOpenConfig={() => { setConfigTab("image"); setIsConfigDrawerOpen(true); }} /> : activeTool !== "chat" ? <div className="chat-placeholder"><div className="chat-placeholder-icon"><MoreHorizontal size={26} /></div><span className="chat-tool-eyebrow">{activeToolMeta.label}</span><h2>{activeToolMeta.description}</h2><p>这个功能正在准备中，之后会在这里成为你的新工作窗口。</p><button className="chat-primary-button" onClick={() => selectTool("chat")}><Command size={16} />返回对话</button></div> : <div className="chat-conversation-workspace">
           <div className="message-scroll" ref={messageListRef}><div className="message-stream">
             {!messages.length ? <div className="empty-chat-state"><span><Sparkles size={22} /></span><strong>开始一段新对话</strong><small>输入问题，或从左侧切换其他工作功能。</small></div> : null}
-            {messages.map((message) => <MessageView message={message} key={message.id} />)}
-          </div></div>
+            {messages.map((message) => <MessageView message={message} user={user} key={message.id} />)}
+          </div>{showScrollToBottom ? <button className="chat-scroll-bottom" type="button" onClick={() => { const list = messageListRef.current; if (!list) return; shouldFollowMessagesRef.current = true; setShowScrollToBottom(false); list.scrollTo({ top: getFollowScrollTop(list.scrollHeight, list.clientHeight), behavior: "smooth" }); }}>回到底部</button> : null}</div>
           <div className="composer-shell"><div className="composer-inner">
             {attachments.length ? <div className="attachment-list">{attachments.map((attachment) => <div className="attachment-chip" key={attachment.id}><span>{attachment.originalName}</span><button className="chat-icon-button" title="移除图片" aria-label={`移除 ${attachment.originalName}`} onClick={() => removeAttachment(attachment)}><X size={12} /></button></div>)}</div> : null}
             {error ? <p className="composer-error">{error}</p> : null}
-            <div className="composer-box"><input ref={fileInputRef} className="hidden" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple onChange={uploadFiles} /><button className="chat-icon-button attachment-button" title="添加图片" aria-label="添加图片" onClick={() => fileInputRef.current?.click()} disabled={isUploading || !selectedPreset?.supportsImages || isSending}><ImagePlus size={19} /></button><textarea className="composer-input" value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendMessage(); } }} placeholder={selectedPreset ? "发送消息" : "请先在 .env 中配置模型"} rows={1} disabled={isSending || !presetId} />{isSending ? <button className="chat-send-button is-stop" title="停止生成" aria-label="停止生成" onClick={stopGenerating}><Square size={15} fill="currentColor" /></button> : <button className="chat-send-button" title="发送消息" aria-label="发送消息" onClick={sendMessage} disabled={isUploading || !presetId || (!text.trim() && !attachments.length)}>{isUploading ? <LoaderCircle className="animate-spin" size={18} /> : <SendHorizontal size={18} />}</button>}</div>
+            <div className="composer-box"><input ref={fileInputRef} className="chat-file-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple onChange={uploadFiles} /><button className="chat-icon-button attachment-button" data-tooltip="文件" type="button" aria-label="上传文件" onClick={() => fileInputRef.current?.click()} disabled={isUploading || !selectedPreset?.supportsImages || isSending}><Paperclip size={19} /></button><textarea className="composer-input" value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendMessage(); } }} placeholder={selectedPreset ? "发送消息" : "请先在 .env 中配置模型"} rows={1} disabled={isSending || !presetId} />{isSending ? <button className="chat-send-button is-stop" title="停止生成" aria-label="停止生成" onClick={stopGenerating}><Square size={15} fill="currentColor" /></button> : <button className="chat-send-button" title="发送消息" aria-label="发送消息" onClick={sendMessage} disabled={isUploading || !presetId || (!text.trim() && !attachments.length)}>{isUploading ? <LoaderCircle className="animate-spin" size={18} /> : <SendHorizontal size={18} />}</button>}</div>
           </div></div>
         </div>}
       </section>
 
       <aside className={`chat-account-panel ${isAccountPanelOpen ? "is-open" : ""}`} aria-label="账号面板">
         <div className="chat-drawer-header"><div><span className="chat-tool-eyebrow">账号</span><h2>个人空间</h2></div><button className="chat-icon-button" title="关闭账号面板" aria-label="关闭账号面板" onClick={() => setIsAccountPanelOpen(false)}><X size={18} /></button></div>
-        <div className="chat-account-card"><div className="chat-account-avatar">{user.username.slice(0, 1).toUpperCase()}</div><strong>{user.username}</strong><span><i />在线</span></div>
+        <div className="chat-account-card"><UserAvatar className="chat-account-avatar" username={user.username} src={user.avatarUrl} /><strong>{user.username}</strong><span><i />在线</span></div>
+        <Link className="chat-profile-link" href="/profile" onClick={() => setIsAccountPanelOpen(false)}><UserRound size={16} />个人资料</Link>
         <div className="chat-account-placeholder"><LayoutPanelLeft size={17} /><span>更多账号与工作区设置即将开放</span></div>
         <button className="chat-secondary-button" onClick={logout}><LogOut size={16} />退出登录</button>
       </aside>
 
       <aside className={`chat-config-drawer ${isConfigDrawerOpen ? "is-open" : ""}`} aria-label="模型配置">
-        <div className="chat-drawer-header"><div><span className="chat-tool-eyebrow">工作台配置</span><h2>连接你的模型</h2></div><button className="chat-icon-button" title="关闭配置" aria-label="关闭配置" onClick={() => setIsConfigDrawerOpen(false)}><X size={18} /></button></div>
-        <p className="chat-drawer-intro">配置和密钥会加密保存在当前账号中。API Key 留空时保留已保存的密钥。</p>
-        <form className="chat-config-form" onSubmit={saveConfig}><label>Provider<select value={configDraft.provider} onChange={(event) => setConfigDraft((current) => ({ ...current, provider: event.target.value }))}><option value="openai-compatible">OpenAI Compatible</option><option value="openai">OpenAI</option><option value="xai">xAI</option><option value="anthropic">Anthropic</option><option value="google">Google</option></select></label><label>Base URL<input type="url" value={configDraft.baseUrl} onChange={(event) => setConfigDraft((current) => ({ ...current, baseUrl: event.target.value }))} placeholder="https://www.yyapi.cloud/v1" /></label><label>API Key<input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder="首次保存时必填" autoComplete="off" /></label><label>Model<input value={configDraft.model} onChange={(event) => setConfigDraft((current) => ({ ...current, model: event.target.value }))} placeholder="例如 gpt-4o-mini" /></label>{configError ? <p className="chat-form-error" role="alert">{configError}</p> : null}{configNotice ? <p className="chat-form-notice" role="status">{configNotice}</p> : null}<div className="chat-config-actions"><button className="chat-secondary-button" type="button" onClick={() => void clearConfig()}>删除配置</button><button className="chat-primary-button" type="submit">保存配置</button></div></form>
+        <div className="chat-drawer-header"><div><span className="chat-tool-eyebrow">工作台配置</span><h2>{configTab === "chat" ? "连接你的模型" : "连接生图模型"}</h2></div><button className="chat-icon-button" title="关闭配置" aria-label="关闭配置" onClick={() => setIsConfigDrawerOpen(false)}><X size={18} /></button></div>
+        <div className="chat-config-tabs" role="tablist" aria-label="模型配置类型"><button type="button" role="tab" aria-selected={configTab === "chat"} className={configTab === "chat" ? "is-active" : ""} onClick={() => { setConfigTab("chat"); setConfigError(""); }}>对话模型</button><button type="button" role="tab" aria-selected={configTab === "image"} className={configTab === "image" ? "is-active" : ""} onClick={() => { setConfigTab("image"); setConfigError(""); }}>生图模型</button></div>
+        {configTab === "chat" ? <><p className="chat-drawer-intro">配置和密钥会加密保存在当前账号中。API Key 留空时保留已保存的密钥。</p>
+        <form className="chat-config-form" onSubmit={saveConfig}>
+          <label>连接方案<select value={connectionPresetId} onChange={(event) => setConnectionPresetId(event.target.value)}>{connectionPresets.map((preset) => <option value={preset.id} key={preset.id} disabled={preset.readOnly}>{preset.label}</option>)}</select></label>
+          {isCustomConnection ? <div className="chat-config-details"><label>Provider<select value={customDraft.provider} onChange={(event) => setCustomDraft((current) => ({ ...current, provider: event.target.value as CustomDraft["provider"] }))}><option value="openai-compatible">OpenAI Compatible</option><option value="openai">OpenAI</option><option value="xai">xAI</option><option value="anthropic">Anthropic</option><option value="google">Google</option></select></label><label>Base URL<input type="url" value={customDraft.baseUrl} onChange={(event) => setCustomDraft((current) => ({ ...current, baseUrl: event.target.value }))} placeholder="https://api.example.com/v1" /></label><label>Model<input value={customDraft.model} onChange={(event) => setCustomDraft((current) => ({ ...current, model: event.target.value }))} placeholder="模型 ID" /></label></div> : selectedConnectionPreset ? <div className="chat-config-details"><label>Provider<input value={selectedConnectionPreset.provider} readOnly /></label><label>Base URL<input value={selectedConnectionPreset.baseUrl} readOnly /></label><label>Model<input value={selectedConnectionPreset.model} readOnly /></label>{selectedConnectionPreset.readOnly ? <p className="chat-form-notice">这是旧账号的自定义配置。请选择新的连接方案后保存以迁移。</p> : null}</div> : null}
+          <label>API Key<input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder="首次保存时必填" autoComplete="off" /></label>
+          {configNotice && !apiKey ? <p className="chat-form-notice" role="status">{configNotice}</p> : null}
+          {configError ? <p className="chat-form-error" role="alert">{configError}</p> : null}
+          <div className="chat-config-actions"><button className="chat-secondary-button" type="button" onClick={() => void clearConfig()}>删除配置</button><button className="chat-secondary-button" type="button" onClick={() => void testConfig()} disabled={isTestingConnection || isSending || !connectionPresetId || selectedConnectionPreset?.readOnly}><PlugZap size={16} />{isTestingConnection ? "测试中..." : "测试连接"}</button><button className="chat-primary-button" type="submit" disabled={!connectionPresetId || selectedConnectionPreset?.readOnly || isTestingConnection}>保存配置</button></div>
+        </form></> : <><p className="chat-drawer-intro">生图模型配置由后端独立管理，不会复用对话模型密钥。</p><form className="chat-config-form" onSubmit={saveImageConfig}><label>配置名称<input value={imageConfigDraft.name} onChange={(event) => setImageConfigDraft((current) => ({ ...current, name: event.target.value }))} placeholder="我的生图模型" /></label><label>Provider<select value={imageConfigDraft.provider} onChange={(event) => setImageConfigDraft((current) => ({ ...current, provider: event.target.value as ImageConfigDraft["provider"] }))}><option value="xai-compatible">xAI Compatible</option><option value="openai-compatible">OpenAI Compatible</option></select></label><label>Base URL<input type="url" value={imageConfigDraft.baseUrl} onChange={(event) => setImageConfigDraft((current) => ({ ...current, baseUrl: event.target.value }))} placeholder="https://api.example.com/v1" /></label><label>Image Model<input value={imageConfigDraft.model} onChange={(event) => setImageConfigDraft((current) => ({ ...current, model: event.target.value }))} placeholder="grok-imagine-image" /></label><label>API Key<input type="password" value={imageApiKey} onChange={(event) => setImageApiKey(event.target.value)} placeholder="首次保存时必填" autoComplete="off" /></label>{configNotice ? <p className="chat-form-notice" role="status">{configNotice}</p> : null}{configError ? <p className="chat-form-error" role="alert">{configError}</p> : null}<div className="chat-config-actions"><button className="chat-secondary-button" type="button" onClick={() => void clearImageConfig()}>删除配置</button><button className="chat-secondary-button" type="button" onClick={() => void testImageConfig()}><PlugZap size={16} />测试连接（可能收费）</button><button className="chat-primary-button" type="submit">保存配置</button></div></form></>}
       </aside>
     </main>
   );
 }
 
-function MessageView({ message }: { message: ChatMessage }) {
+function MessageView({ message, user }: { message: ChatMessage; user: User }) {
   const isUser = message.role === "user";
+  const generationLabel = !isUser ? getGenerationLabel(message.status) : null;
+  const hasText = message.parts.some((part) => part.type === "text" && part.text.length > 0);
   return (
-    <article className={`message-row flex gap-3 ${isUser ? "is-user flex-row-reverse" : ""}`}>
-      <div className={`message-avatar grid h-8 w-8 shrink-0 place-items-center rounded-md ${isUser ? "bg-slate-200 text-slate-700" : "bg-[var(--accent)] text-white"}`}>{isUser ? "我" : <Bot size={18} />}</div>
-      <div className={`message-body min-w-0 max-w-[82%] ${isUser ? "text-right" : ""}`}>
-        {!isUser && message.model ? <div className="message-model mb-1 text-xs text-[var(--muted)]">{message.model}</div> : null}
-        <div className={`message-bubble inline-block max-w-full text-left ${isUser ? "rounded-md bg-emerald-50 px-4 py-3" : "py-1"}`}>
+    <article className={`message-row ${isUser ? "is-user" : "is-assistant"}`}>
+      {isUser ? <UserAvatar className="message-avatar message-user-avatar" username={user.username} src={user.avatarUrl} /> : <div className="message-avatar message-ai-avatar"><Bot size={18} /></div>}
+      <div className={`message-body ${isUser ? "is-user-body" : "is-assistant-body"}`}>
+        {!isUser && message.model ? <div className="message-model">{message.model}</div> : null}
+        <div className={`message-bubble ${isUser ? "user-message-bubble" : "assistant-message-bubble"}`}>
+          {!isUser && generationLabel && (!hasText || message.status !== "complete") ? <div className={`message-status ${message.status === "error" ? "is-error" : ""}`} aria-live="polite"><span className="message-status-dot" aria-hidden="true" />{generationLabel}</div> : null}
           {message.parts.map((part, index) => part.type === "text"
-            ? <Markdown key={`${message.id}-text-${index}`}>{part.text || "正在生成..."}</Markdown>
+            ? part.text ? <Markdown key={`${message.id}-text-${index}`}>{part.text}</Markdown> : null
             : <img className="mt-2 max-h-80 max-w-full rounded-md border border-[var(--border)] object-contain" src={`/api/attachments/${part.attachmentId}`} alt="发送的图片" key={part.attachmentId} />)}
         </div>
       </div>

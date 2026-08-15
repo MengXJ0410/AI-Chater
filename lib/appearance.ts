@@ -2,16 +2,23 @@ export const APPEARANCE_STORAGE_KEY = "ai-chater-appearance-v1";
 export const APPEARANCE_CHANGE_EVENT = "ai-chater:appearance-change";
 export const CHAT_BACKGROUND_STORAGE_KEY = "ai-chater-chat-background-v1";
 export const CHAT_BACKGROUND_CHANGE_EVENT = "ai-chater:chat-background-change";
-export const DEFAULT_ACCENT = "#12634f";
-export const ACCENT_SWATCHES = ["#12634f", "#2f63c8", "#9f3f68", "#c25d22", "#7057b8"];
+export const DEFAULT_ACCENT = "#1fbbbb";
+export const ACCENT_SWATCHES = ["#1fbbbb", "#2f63c8", "#9f3f68", "#c25d22", "#7057b8"];
+
+export type AppearanceMode = "system" | "light" | "dark";
+export type ResolvedAppearanceMode = Exclude<AppearanceMode, "system">;
 
 export type AppearancePreferences = {
+  colorMode: AppearanceMode;
   accent: string;
   background: string | null;
   surfaceOpacity: number;
   backgroundBlur: number;
   bubbleColorRange: number;
   bubbleActivity: number;
+  chatGlowBrightness: number;
+  chatGlowMotion: number;
+  chatFontSize: number;
 };
 
 export type DerivedAccentTheme = {
@@ -25,29 +32,57 @@ export type DerivedAccentTheme = {
   actionText: string;
 };
 
-export type AppearanceChangeDetail = { accent: string; bubbleColorRange: number; bubbleActivity: number };
+export type AppearanceChangeDetail = { accent: string; bubbleColorRange: number; bubbleActivity: number; colorMode: ResolvedAppearanceMode };
 export type ChatBackgroundChangeDetail = { enabled: boolean };
-export type AppearancePanelVisibility = { showBubbleControls: boolean; showBackgroundControls: boolean };
+export type AppearancePanelVisibility = { showBubbleControls: boolean; showBackgroundControls: boolean; showChatGlowControls: boolean };
 export type BubbleColorFactors = { redFactor: number; greenFactor: number; blueFactor: number };
 export type DerivedBubbleColor = { primary: string; secondary: string; text: string };
 
 export const defaultAppearance: AppearancePreferences = {
+  colorMode: "system",
   accent: DEFAULT_ACCENT,
   background: null,
   surfaceOpacity: 86,
   backgroundBlur: 0,
   bubbleColorRange: 60,
   bubbleActivity: 70,
+  chatGlowBrightness: 85,
+  chatGlowMotion: 100,
+  chatFontSize: 2,
 };
 
 export function getAppearancePanelVisibility(pathname: string, chatBackgroundEnabled: boolean): AppearancePanelVisibility {
-  if (pathname === "/") return { showBubbleControls: true, showBackgroundControls: true };
-  if (pathname === "/chat") return { showBubbleControls: false, showBackgroundControls: chatBackgroundEnabled };
-  return { showBubbleControls: false, showBackgroundControls: false };
+  if (pathname === "/") return { showBubbleControls: true, showBackgroundControls: true, showChatGlowControls: false };
+  if (pathname === "/chat") return { showBubbleControls: false, showBackgroundControls: chatBackgroundEnabled, showChatGlowControls: true };
+  return { showBubbleControls: false, showBackgroundControls: false, showChatGlowControls: false };
 }
 
 export function isHexColor(value: unknown): value is string {
   return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value);
+}
+
+export function isAppearanceMode(value: unknown): value is AppearanceMode {
+  return value === "system" || value === "light" || value === "dark";
+}
+
+export function resolveAppearanceMode(mode: AppearanceMode, systemPrefersDark: boolean): ResolvedAppearanceMode {
+  if (mode === "system") return systemPrefersDark ? "dark" : "light";
+  return mode;
+}
+
+export function getBackgroundStrength(surfaceOpacity: number) {
+  return Math.min(1, Math.max(0, surfaceOpacity / 100));
+}
+
+const CHAT_FONT_SCALES = [0.4, 0.8, 1, 1.2, 1.6] as const;
+const CHAT_FONT_LABELS = ["极小", "小", "默认", "大", "极大"] as const;
+
+export function getChatFontScale(size: number) {
+  return CHAT_FONT_SCALES[Math.min(4, Math.max(0, Math.round(size)))] ?? 1;
+}
+
+export function getChatFontLabel(size: number) {
+  return CHAT_FONT_LABELS[Math.min(4, Math.max(0, Math.round(size)))] ?? "默认";
 }
 
 export function darkerColor(hex: string) {
@@ -101,10 +136,12 @@ function readableText(background: Rgb) {
   return contrastRatio(background, light) >= contrastRatio(background, dark) ? "#ffffff" : "#121c19";
 }
 
-export function deriveAccentTheme(hex: string): DerivedAccentTheme {
+export function deriveAccentTheme(hex: string, colorMode: ResolvedAppearanceMode = "light"): DerivedAccentTheme {
   const accent = hexToRgb(isHexColor(hex) ? hex : DEFAULT_ACCENT);
   const white = { r: 255, g: 255, b: 255 };
   const black = { r: 0, g: 0, b: 0 };
+  const darkSurface = { r: 15, g: 24, b: 36 };
+  const darkBorder = { r: 42, g: 57, b: 75 };
   const actionText = readableText(accent);
   const actionTarget = actionText === "#ffffff" ? black : white;
   const action = contrastRatio(accent, hexToRgb(actionText)) >= 4.5 ? accent : mix(accent, actionTarget, 0.18);
@@ -112,9 +149,9 @@ export function deriveAccentTheme(hex: string): DerivedAccentTheme {
   return {
     accent: rgbToHex(accent),
     strong: rgbToHex(mix(accent, black, 0.26)),
-    soft: rgbToHex(mix(white, accent, 0.08)),
-    muted: rgbToHex(mix(white, accent, 0.16)),
-    border: rgbToHex(mix(white, accent, 0.32)),
+    soft: rgbToHex(mix(colorMode === "dark" ? darkSurface : white, accent, colorMode === "dark" ? 0.14 : 0.08)),
+    muted: rgbToHex(mix(colorMode === "dark" ? darkSurface : white, accent, colorMode === "dark" ? 0.25 : 0.16)),
+    border: rgbToHex(mix(colorMode === "dark" ? darkBorder : white, accent, colorMode === "dark" ? 0.44 : 0.32)),
     action: rgbToHex(action),
     actionAlt: rgbToHex(shift(action, actionText === "#ffffff" ? 7 : -7, actionText === "#ffffff" ? 4 : -4, actionText === "#ffffff" ? 6 : -6)),
     actionText,
@@ -149,6 +186,7 @@ export function parseAppearance(value: string | null): AppearancePreferences {
     if (!candidate || typeof candidate !== "object") return defaultAppearance;
     const record = candidate as Record<string, unknown>;
     return {
+      colorMode: isAppearanceMode(record.colorMode) ? record.colorMode : "system",
       accent: isHexColor(record.accent) ? record.accent : DEFAULT_ACCENT,
       background: typeof record.background === "string" && /^data:image\/(webp|png|jpeg);base64,/i.test(record.background)
         ? record.background
@@ -157,6 +195,9 @@ export function parseAppearance(value: string | null): AppearancePreferences {
       backgroundBlur: numberInRange(record.backgroundBlur, defaultAppearance.backgroundBlur, 0, 24),
       bubbleColorRange: numberInRange(record.bubbleColorRange, defaultAppearance.bubbleColorRange, 0, 100),
       bubbleActivity: numberInRange(record.bubbleActivity, defaultAppearance.bubbleActivity, 0, 200),
+      chatGlowBrightness: numberInRange(record.chatGlowBrightness, defaultAppearance.chatGlowBrightness, 0, 200),
+      chatGlowMotion: numberInRange(record.chatGlowMotion, defaultAppearance.chatGlowMotion, 0, 200),
+      chatFontSize: numberInRange(record.chatFontSize, defaultAppearance.chatFontSize, 0, 4),
     };
   } catch {
     return defaultAppearance;

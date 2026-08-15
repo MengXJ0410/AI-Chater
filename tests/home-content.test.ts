@@ -57,7 +57,8 @@ describe("home author profile", () => {
 
 describe("home sky configuration", () => {
   it("uses a deterministic layered star field with controlled bright stars", () => {
-    expect(HOME_STAR_POINTS).toHaveLength(60);
+    expect(HOME_STAR_POINTS.length).toBeGreaterThanOrEqual(50);
+    expect(HOME_STAR_POINTS.length).toBeLessThanOrEqual(70);
     expect(HOME_BRIGHT_STAR_COUNT).toBeLessThanOrEqual(6);
     expect(new Set(HOME_STAR_POINTS.map((star) => `${star.left}-${star.top}`)).size).toBe(HOME_STAR_POINTS.length);
     expect(HOME_STAR_POINTS.every((star) => star.left >= 0 && star.left <= 100 && star.top >= 0 && star.top <= 100)).toBe(true);

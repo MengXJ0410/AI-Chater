@@ -41,6 +41,9 @@ if errorlevel 1 (
   start "AI Chater Server" /D "%~dp0" cmd /k "npm run dev"
 )
 
+echo Starting image generation worker...
+start "AI Chater Image Worker" /D "%~dp0" cmd /c "npm run image:worker"
+
 echo Waiting for AI Chater...
 set /a ATTEMPTS=0
 :wait_for_server

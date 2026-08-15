@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { getDb } from "@/lib/db";
 import { sessions, users } from "@/lib/db/schema";
 import { getSessionTtlDays } from "@/lib/config";
+import { avatarUrl } from "@/lib/avatar";
 
 const SESSION_COOKIE = "ai_chater_session";
 
@@ -69,6 +70,8 @@ export async function getCurrentUser() {
       id: users.id,
       username: users.username,
       deletedAt: users.deletedAt,
+      avatarStorageKey: users.avatarStorageKey,
+      avatarUpdatedAt: users.avatarUpdatedAt,
     })
     .from(sessions)
     .innerJoin(users, eq(sessions.userId, users.id))
@@ -82,7 +85,7 @@ export async function getCurrentUser() {
     return null;
   }
 
-  return { id: session.id, username: session.username };
+  return { id: session.id, username: session.username, avatarUrl: avatarUrl(session.avatarStorageKey ? session.avatarUpdatedAt : null) };
 }
 
 export async function requireUser() {

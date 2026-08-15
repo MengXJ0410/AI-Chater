@@ -3,7 +3,7 @@
 import Link from "next/link";
 import NextImage from "next/image";
 import { useRouter } from "next/navigation";
-import { CSSProperties, useCallback, useEffect, useRef, useState } from "react";
+import { CSSProperties, MouseEvent, useCallback, useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Bot, ChevronDown, Github, Image as ImageIcon, Layers3, LogOut, MessageSquareText, Settings2, WandSparkles } from "lucide-react";
 import { pickAiTerms } from "@/lib/ai-terms";
 import { HOME_AUTHOR_PROFILE } from "@/lib/home-profile";
@@ -29,6 +29,7 @@ import {
   nextHomePageIndex,
 } from "@/lib/home-sections";
 import { HOME_STAR_POINTS } from "@/lib/home-sky";
+import { CHAT_ENTRY_REQUEST_EVENT, CHAT_ENTRY_STORAGE_KEY, createChatEntryToken, isPlainPrimaryClick } from "@/lib/chat-entry-transition";
 
 type HomeUser = { id: string; username: string } | null;
 
@@ -59,6 +60,8 @@ export function HomeHero({ backgrounds, user }: { backgrounds: string[]; user: H
   const wheelUnlockTimerRef = useRef<number | null>(null);
   const [activePage, setActivePage] = useState(0);
   const [avatarAvailable, setAvatarAvailable] = useState(true);
+  const [isLaunchingChat, setIsLaunchingChat] = useState(false);
+  const launchTimerRef = useRef<number | null>(null);
 
   const scrollToPage = useCallback((index: number, behavior: ScrollBehavior = "smooth") => {
     const shell = scrollRef.current;
@@ -204,6 +207,10 @@ export function HomeHero({ backgrounds, user }: { backgrounds: string[]; user: H
     };
   }, [scrollToPage]);
 
+  useEffect(() => () => {
+    if (launchTimerRef.current !== null) window.clearTimeout(launchTimerRef.current);
+  }, []);
+
   function movePointer(event: React.PointerEvent<HTMLElement>) {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const bounds = fieldRef.current?.getBoundingClientRect();
@@ -214,6 +221,16 @@ export function HomeHero({ backgrounds, user }: { backgrounds: string[]; user: H
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
     router.refresh();
+  }
+
+  function launchChat(event: MouseEvent<HTMLAnchorElement>) {
+    if (!user || !isPlainPrimaryClick(event) || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    event.preventDefault();
+    if (isLaunchingChat) return;
+    setIsLaunchingChat(true);
+    window.sessionStorage.setItem(CHAT_ENTRY_STORAGE_KEY, createChatEntryToken());
+    window.dispatchEvent(new Event(CHAT_ENTRY_REQUEST_EVENT));
+    launchTimerRef.current = window.setTimeout(() => router.push("/chat"), 140);
   }
 
   return (
@@ -254,7 +271,7 @@ export function HomeHero({ backgrounds, user }: { backgrounds: string[]; user: H
         <div className="home-stage" aria-label="智能猫娘">
           <div className="home-stage-content" ref={stageContentRef}>
             <h1>🥰智 能 猫 娘😋</h1>
-            <Link className="home-launch" href={user ? "/chat" : "/login"}>👍🤓启动🤓👍</Link>
+            <Link className={`home-launch ${isLaunchingChat ? "is-transitioning" : ""}`} href={user ? "/chat" : "/login"} onClick={launchChat} aria-busy={isLaunchingChat || undefined}>👍🤓启动🤓👍</Link>
           </div>
         </div>
         <button className="home-explore-cue" type="button" onClick={() => scrollToPage(1)} aria-label="查看项目介绍"><span>向下探索</span><ChevronDown size={18} /></button>
@@ -268,19 +285,26 @@ export function HomeHero({ backgrounds, user }: { backgrounds: string[]; user: H
           {HOME_STAR_POINTS.map((star) => <span className={`home-star home-star-${star.kind} home-star-color-${star.color}`} style={{ left: `${star.left}%`, top: `${star.top}%`, width: `${star.size}px`, height: `${star.size}px`, "--star-opacity": star.opacity, "--star-delay": `${star.delay}s`, "--star-duration": `${star.duration}s` } as CSSProperties} key={`${star.left}-${star.top}`} />)}
           {METEOR_PATHS.map((meteor) => <span className="home-meteor" style={{ left: meteor.left, top: meteor.top, animationDelay: meteor.delay, animationDuration: meteor.duration }} key={meteor.left} />)}
         </div>
+        <div className="home-day-tech" aria-hidden="true">
+          <span className="home-day-grid" />
+          <span className="home-day-track home-day-track-one" />
+          <span className="home-day-track home-day-track-two" />
+          <span className="home-day-track home-day-track-three" />
+          <span className="home-day-track home-day-track-four" />
+        </div>
         <div className="home-about-content">
           <div className="home-about-author">
             <span className="home-section-kicker">author</span>
             <div className="home-author-avatar-frame" aria-label={`${HOME_AUTHOR_PROFILE.name}头像`}>
-              {avatarAvailable ? <NextImage className="home-author-avatar" src={HOME_AUTHOR_PROFILE.avatarSrc} alt={`${HOME_AUTHOR_PROFILE.name}头像`} width={96} height={96} onError={() => setAvatarAvailable(false)} /> : <div className="home-author-avatar-fallback" aria-hidden="true"><Bot size={30} /></div>}
+              {avatarAvailable ? <NextImage className="home-author-avatar" src={HOME_AUTHOR_PROFILE.avatarSrc} alt={`${HOME_AUTHOR_PROFILE.name}头像`} width={160} height={160} onError={() => setAvatarAvailable(false)} /> : <div className="home-author-avatar-fallback" aria-hidden="true"><Bot size={30} /></div>}
             </div>
             <h2>{HOME_AUTHOR_PROFILE.name}</h2>
             <p>{HOME_AUTHOR_PROFILE.bio}</p>
             <div className="home-author-links">
-              <a href={HOME_AUTHOR_PROFILE.githubUrl} target="_blank" rel="noreferrer"><Github size={16} />GitHub<ArrowUpRight size={14} /></a>
-              <a href={HOME_AUTHOR_PROFILE.bilibiliUrl} target="_blank" rel="noreferrer"><MessageSquareText size={16} />Bilibili<ArrowUpRight size={14} /></a>
-              <a href={HOME_AUTHOR_PROFILE.csdnUrl} target="_blank" rel="noreferrer"><MessageSquareText size={16} />CSDN<ArrowUpRight size={14} /></a>
-              <a href={HOME_AUTHOR_PROFILE.WebUrl4} target="_blank" rel="noreferrer"><MessageSquareText size={16} />WEB4<ArrowUpRight size={14} /></a>
+              <a href={HOME_AUTHOR_PROFILE.githubUrl} target="_blank" rel="noreferrer"><Github size={24} />GitHub<ArrowUpRight size={18} /></a>
+              <a href={HOME_AUTHOR_PROFILE.bilibiliUrl} target="_blank" rel="noreferrer"><MessageSquareText size={24} />Bilibili<ArrowUpRight size={18} /></a>
+              <a href={HOME_AUTHOR_PROFILE.csdnUrl} target="_blank" rel="noreferrer"><MessageSquareText size={24} />CSDN<ArrowUpRight size={18} /></a>
+              <a href={HOME_AUTHOR_PROFILE.WebUrl4} target="_blank" rel="noreferrer"><MessageSquareText size={24} />WEB4<ArrowUpRight size={18} /></a>
             </div>
           </div>
           <div className="home-about-project">

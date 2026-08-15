@@ -30,9 +30,11 @@ describe("MySQL user AI configuration isolation (optional integration)", () => {
     try {
       await db.insert(users).values([userA, userB]);
       await saveUserAiConfig(userA.id, {
+        presetId: "custom",
+        name: "账号 YYAPI",
         provider: "openai-compatible",
-        baseUrl: "https://www.yyapi.cloud/v1",
-        model: "gpt-4o-mini",
+        baseUrl: "https://api.example.com/v1",
+        model: "custom-model",
         apiKey: "secret-key-1234",
       });
       expect(await getPublicUserAiConfig(userB.id)).toBeNull();
@@ -45,7 +47,7 @@ describe("MySQL user AI configuration isolation (optional integration)", () => {
       expect(upgraded).toEqual([{ keyId: "v2" }]);
 
       await deleteUserAiConfig(userB.id);
-      expect(await getPublicUserAiConfig(userA.id)).toMatchObject({ model: "gpt-4o-mini", apiKeyLast4: "1234" });
+      expect(await getPublicUserAiConfig(userA.id)).toMatchObject({ presetId: "custom", name: "账号 YYAPI", model: "custom-model", apiKeyLast4: "1234" });
       await deleteUserAiConfig(userA.id);
       expect(await getPublicUserAiConfig(userA.id)).toBeNull();
     } finally {

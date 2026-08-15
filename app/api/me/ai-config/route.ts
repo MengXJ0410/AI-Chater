@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { routeError } from "@/lib/api";
 import { assertSameOrigin } from "@/lib/http";
-import { deleteUserAiConfig, getPublicUserAiConfig, saveUserAiConfig } from "@/lib/user-ai-config";
+import { deleteUserAiConfig, getPublicUserAiConfig, getPublicUserAiConnectionPresets, saveUserAiConfig } from "@/lib/user-ai-config";
 import { userAiConfigSchema } from "@/lib/validators";
 
 export const runtime = "nodejs";
@@ -10,7 +10,8 @@ export const runtime = "nodejs";
 export async function GET() {
   try {
     const user = await requireUser();
-    return NextResponse.json({ config: await getPublicUserAiConfig(user.id) });
+    const config = await getPublicUserAiConfig(user.id);
+    return NextResponse.json({ config, presets: getPublicUserAiConnectionPresets(config) });
   } catch (error) {
     return routeError(error);
   }

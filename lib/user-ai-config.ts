@@ -2,12 +2,13 @@ import { createCipheriv, createDecipheriv, randomBytes } from "crypto";
 import { lookup } from "dns/promises";
 import { isIP } from "net";
 import { eq } from "drizzle-orm";
-import { USER_AI_PRESET_ID, type AiProvider, type PublicAiPreset } from "@/lib/config";
+import { getUserAiConnectionPresets, USER_AI_PRESET_ID, type AiProvider, type PublicAiPreset, type UserAiConnectionPreset } from "@/lib/config";
 import { getDb } from "@/lib/db";
 import { userAiConfigs } from "@/lib/db/schema";
 import { RequestError } from "@/lib/http";
 
 export { USER_AI_PRESET_ID };
+export const CUSTOM_USER_AI_PRESET_ID = "custom";
 
 const OFFICIAL_BASE_URLS: Record<Exclude<AiProvider, "openai-compatible">, string> = {
   openai: "https://api.openai.com/v1",
@@ -22,6 +23,15 @@ type EncryptionKeyring = {
 };
 
 export type UserAiConfigInput = {
+  presetId: string;
+  name?: string;
+  provider?: AiProvider;
+  baseUrl?: string;
+  model?: string;
+  apiKey?: string;
+};
+
+type LegacyUserAiConfigInput = {
   provider: AiProvider;
   baseUrl: string;
   model: string;
@@ -29,6 +39,8 @@ export type UserAiConfigInput = {
 };
 
 export type PublicUserAiConfig = {
+  presetId?: string;
+  name?: string;
   provider: AiProvider;
   baseUrl: string;
   model: string;
@@ -42,6 +54,36 @@ export type UserAiModelConfig = {
   model: string;
   apiKey: string;
 };
+
+export type PublicUserAiConnectionPreset = UserAiConnectionPreset & { readOnly?: boolean };
+
+const LEGACY_PRESET_ID = "legacy-custom";
+
+function getConnectionPreset(presetId: string) {
+  return getUserAiConnectionPresets().find((preset) => preset.id === presetId);
+}
+
+function canonicalBaseUrl(provider: AiProvider, baseUrl: string | null | undefined) {
+  return baseUrl || (provider === "openai" ? OFFICIAL_BASE_URLS.openai : provider === "xai" ? OFFICIAL_BASE_URLS.xai : provider === "anthropic" ? OFFICIAL_BASE_URLS.anthropic : provider === "google" ? OFFICIAL_BASE_URLS.google : "");
+}
+
+function matchingConnectionPreset(row: Pick<typeof userAiConfigs.$inferSelect, "provider" | "baseUrl" | "model">) {
+  const baseUrl = canonicalBaseUrl(row.provider, row.baseUrl);
+  return getUserAiConnectionPresets().find((preset) => preset.provider === row.provider && preset.baseUrl === baseUrl && preset.model === row.model);
+}
+
+export function getPublicUserAiConnectionPresets(config?: PublicUserAiConfig | null): PublicUserAiConnectionPreset[] {
+  const presets: PublicUserAiConnectionPreset[] = getUserAiConnectionPresets();
+  presets.push({ id: CUSTOM_USER_AI_PRESET_ID, label: config?.presetId === CUSTOM_USER_AI_PRESET_ID && config.name ? config.name : "自定义预设", provider: "openai-compatible", baseUrl: "", model: "" });
+  if (config && config.presetId === LEGACY_PRESET_ID) {
+    presets.push({ id: LEGACY_PRESET_ID, label: "已有自定义配置", provider: config.provider, baseUrl: config.baseUrl, model: config.model, readOnly: true });
+  }
+  return presets;
+}
+
+export function getUserAiConnectionPresetById(presetId: string) {
+  return getConnectionPreset(presetId);
+}
 
 function decodeEncryptionKey(value: string, label: string) {
   const key = Buffer.from(value, "base64");
@@ -70,6 +112,10 @@ function getEncryptionKeyring(): EncryptionKeyring {
   }
   if (!keys.has(activeKeyId)) throw new Error("AI_CONFIG_ACTIVE_KEY_ID 未在密钥环中定义。");
   return { activeKeyId, keys };
+}
+
+export function getActiveEncryptionKeyId() {
+  return getEncryptionKeyring().activeKeyId;
 }
 
 function isLoopbackHost(hostname: string) {
@@ -149,12 +195,18 @@ export function normalizeBaseUrl(value: string, provider: AiProvider = "openai-c
   return `${url.origin}${pathname}`;
 }
 
-export function validateUserAiConfig(input: Omit<UserAiConfigInput, "apiKey">) {
+export function validateUserAiConfig(input: { provider: AiProvider; baseUrl: string; model: string }, options?: { allowUnlistedCompatibleUrl?: boolean }) {
   const baseUrl = input.baseUrl ? normalizeBaseUrl(input.baseUrl, input.provider) : undefined;
   if (input.provider === "openai-compatible") {
     if (!baseUrl) throw new RequestError("OpenAI Compatible Provider 必须填写 Base URL。");
+    if (options?.allowUnlistedCompatibleUrl) {
+      const customUrl = new URL(baseUrl);
+      if (customUrl.protocol !== "https:" || isIP(customUrl.hostname) || isLoopbackHost(customUrl.hostname)) {
+        throw new RequestError("自定义 Base URL 必须是 HTTPS 公网域名。", 403);
+      }
+    }
     const allowlist = process.env.USER_AI_ALLOWED_BASE_URLS;
-    if (allowlist) {
+    if (allowlist && !options?.allowUnlistedCompatibleUrl) {
       let parsed: unknown;
       try {
         parsed = JSON.parse(allowlist);
@@ -170,6 +222,25 @@ export function validateUserAiConfig(input: Omit<UserAiConfigInput, "apiKey">) {
   }
 
   return { provider: input.provider, baseUrl, model: input.model };
+}
+
+function validateConnectionPreset(preset: UserAiConnectionPreset) {
+  const baseUrl = normalizeBaseUrl(preset.baseUrl, preset.provider);
+  if (preset.provider === "openai-compatible") {
+    const allowlist = process.env.USER_AI_ALLOWED_BASE_URLS;
+    if (allowlist) {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(allowlist);
+      } catch {
+        throw new Error("USER_AI_ALLOWED_BASE_URLS 必须是 JSON 数组。");
+      }
+      if (!Array.isArray(parsed) || !parsed.every((value) => typeof value === "string")) throw new Error("USER_AI_ALLOWED_BASE_URLS 必须是 URL 字符串数组。");
+      const allowed = new Set(parsed.map((value) => normalizeBaseUrl(value, preset.provider)));
+      if (!allowed.has(baseUrl)) throw new RequestError("该连接方案未获管理员授权。", 403);
+    }
+  }
+  return validateUserAiConfig(preset);
 }
 
 export function encryptApiKey(apiKey: string) {
@@ -195,21 +266,26 @@ export function decryptApiKey(encrypted: Pick<typeof userAiConfigs.$inferSelect,
 }
 
 function toPublicConfig(row: typeof userAiConfigs.$inferSelect): PublicUserAiConfig {
+  const storedPreset = row.presetId === CUSTOM_USER_AI_PRESET_ID
+    ? CUSTOM_USER_AI_PRESET_ID
+    : getConnectionPreset(row.presetId ?? "")?.id;
   return {
+    presetId: storedPreset ?? matchingConnectionPreset(row)?.id ?? LEGACY_PRESET_ID,
+    name: row.name ?? undefined,
     provider: row.provider,
-    baseUrl: row.baseUrl ?? "",
+    baseUrl: canonicalBaseUrl(row.provider, row.baseUrl),
     model: row.model,
     apiKeyConfigured: true,
     apiKeyLast4: row.apiKeyLast4,
   };
 }
 
-function toPublicConfigValues(values: Pick<PublicUserAiConfig, "provider" | "baseUrl" | "model" | "apiKeyLast4">): PublicUserAiConfig {
+function toPublicConfigValues(values: Pick<PublicUserAiConfig, "presetId" | "name" | "provider" | "baseUrl" | "model" | "apiKeyLast4">): PublicUserAiConfig {
   return { ...values, apiKeyConfigured: true };
 }
 
 export function toUserAiPreset(config: PublicUserAiConfig): PublicAiPreset {
-  return { id: USER_AI_PRESET_ID, label: "我的配置", model: config.model, supportsImages: false };
+  return { id: USER_AI_PRESET_ID, label: config.name || "我的配置", model: config.model, supportsImages: false };
 }
 
 export async function getPublicUserAiConfig(userId: string) {
@@ -217,27 +293,59 @@ export async function getPublicUserAiConfig(userId: string) {
   return rows[0] ? toPublicConfig(rows[0]) : null;
 }
 
-export async function saveUserAiConfig(userId: string, input: UserAiConfigInput) {
+function resolveInput(input: UserAiConfigInput | LegacyUserAiConfigInput) {
+  if ("presetId" in input) {
+    if (input.presetId === CUSTOM_USER_AI_PRESET_ID) {
+      if (!input.provider || !input.baseUrl || !input.model) throw new RequestError("自定义预设需要填写 Provider、Base URL 和 Model。");
+      const normalized = validateUserAiConfig({ provider: input.provider, baseUrl: input.baseUrl, model: input.model }, { allowUnlistedCompatibleUrl: true });
+      return { ...normalized, presetId: CUSTOM_USER_AI_PRESET_ID, name: input.name, apiKey: input.apiKey };
+    }
+    const preset = getConnectionPreset(input.presetId);
+    if (!preset) throw new RequestError("连接方案不存在。", 400);
+    const normalized = validateConnectionPreset(preset);
+    return { ...normalized, presetId: preset.id, name: undefined, apiKey: input.apiKey };
+  }
   const normalized = validateUserAiConfig(input);
-  const existing = await getDb().select().from(userAiConfigs).where(eq(userAiConfigs.userId, userId)).limit(1);
-  if (!input.apiKey && !existing[0]) throw new RequestError("首次保存必须填写 API Key。");
+  return { ...normalized, presetId: matchingConnectionPreset(input)?.id ?? LEGACY_PRESET_ID, name: undefined, apiKey: input.apiKey };
+}
 
-  const encrypted = input.apiKey ? encryptApiKey(input.apiKey) : existing[0]!;
+export async function resolveUserAiModelConfig(userId: string, input: UserAiConfigInput) {
+  const resolved = resolveInput(input);
+  const { apiKey, provider, baseUrl, model } = resolved;
+  const existing = await getDb().select().from(userAiConfigs).where(eq(userAiConfigs.userId, userId)).limit(1);
+  if (!apiKey && !existing[0]) throw new RequestError("首次测试必须填写 API Key。");
+  const resolvedApiKey = apiKey ?? decryptApiKey(existing[0]!);
+  return { provider, baseUrl, model, apiKey: resolvedApiKey } satisfies UserAiModelConfig;
+}
+
+export async function saveUserAiConfig(userId: string, input: UserAiConfigInput | LegacyUserAiConfigInput) {
+  const resolved = resolveInput(input);
+  const { apiKey, presetId, name, provider, baseUrl, model } = resolved;
+  const normalized = { provider, baseUrl, model };
+  const existing = await getDb().select().from(userAiConfigs).where(eq(userAiConfigs.userId, userId)).limit(1);
+  if (!apiKey && !existing[0]) throw new RequestError("首次保存必须填写 API Key。");
+
+  let encrypted = apiKey ? encryptApiKey(apiKey) : existing[0]!;
+  if (!apiKey && existing[0] && existing[0].encryptionKeyId !== getEncryptionKeyring().activeKeyId) {
+    encrypted = encryptApiKey(decryptApiKey(existing[0]));
+  }
   const values = {
+    presetId,
+    name: presetId === CUSTOM_USER_AI_PRESET_ID ? (name ?? existing[0]?.name ?? null) : null,
     ...normalized,
     apiKeyCiphertext: encrypted.apiKeyCiphertext,
     apiKeyIv: encrypted.apiKeyIv,
     apiKeyAuthTag: encrypted.apiKeyAuthTag,
     encryptionKeyId: encrypted.encryptionKeyId,
-    apiKeyLast4: input.apiKey ? input.apiKey.slice(-4) : existing[0]!.apiKeyLast4,
+    apiKeyLast4: apiKey ? apiKey.slice(-4) : existing[0]!.apiKeyLast4,
   };
   if (existing[0]) {
     await getDb().update(userAiConfigs).set(values).where(eq(userAiConfigs.userId, userId));
-    return toPublicConfigValues({ ...normalized, baseUrl: normalized.baseUrl ?? "", apiKeyLast4: values.apiKeyLast4 });
+    return toPublicConfigValues({ presetId, name: values.name ?? undefined, ...normalized, baseUrl: normalized.baseUrl ?? "", apiKeyLast4: values.apiKeyLast4 });
   }
 
   await getDb().insert(userAiConfigs).values({ userId, ...values });
-  return toPublicConfigValues({ ...normalized, baseUrl: normalized.baseUrl ?? "", apiKeyLast4: values.apiKeyLast4 });
+  return toPublicConfigValues({ presetId, name: values.name ?? undefined, ...normalized, baseUrl: normalized.baseUrl ?? "", apiKeyLast4: values.apiKeyLast4 });
 }
 
 export async function deleteUserAiConfig(userId: string) {
@@ -249,7 +357,10 @@ export async function getUserAiModelConfig(userId: string): Promise<UserAiModelC
   const row = rows[0];
   if (!row) return null;
 
-  const config = validateUserAiConfig({ provider: row.provider, baseUrl: row.baseUrl ?? "", model: row.model });
+  const config = validateUserAiConfig(
+    { provider: row.provider, baseUrl: row.baseUrl ?? "", model: row.model },
+    { allowUnlistedCompatibleUrl: row.presetId === CUSTOM_USER_AI_PRESET_ID },
+  );
   const apiKey = decryptApiKey(row);
   const activeKeyId = getEncryptionKeyring().activeKeyId;
   if (row.encryptionKeyId !== activeKeyId) {

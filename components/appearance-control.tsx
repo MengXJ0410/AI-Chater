@@ -2,7 +2,7 @@
 
 import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { ImagePlus, Palette, RotateCcw, Trash2 } from "lucide-react";
+import { ImagePlus, Monitor, Moon, Palette, RotateCcw, Sun, Trash2 } from "lucide-react";
 import {
   ACCENT_SWATCHES,
   APPEARANCE_CHANGE_EVENT,
@@ -11,10 +11,15 @@ import {
   CHAT_BACKGROUND_STORAGE_KEY,
   deriveAccentTheme,
   defaultAppearance,
+  getBackgroundStrength,
+  getChatFontLabel,
+  getChatFontScale,
   getAppearancePanelVisibility,
   parseAppearance,
   type ChatBackgroundChangeDetail,
+  type AppearanceMode,
   type AppearancePreferences,
+  resolveAppearanceMode,
 } from "@/lib/appearance";
 
 const maxSourceBytes = 15 * 1024 * 1024;
@@ -23,7 +28,8 @@ const maxImageDimension = 1920;
 
 function applyAppearance(appearance: AppearancePreferences) {
   const root = document.documentElement;
-  const theme = deriveAccentTheme(appearance.accent);
+  const colorMode = resolveAppearanceMode(appearance.colorMode, window.matchMedia("(prefers-color-scheme: dark)").matches);
+  const theme = deriveAccentTheme(appearance.accent, colorMode);
   root.style.setProperty("--accent", theme.accent);
   root.style.setProperty("--accent-strong", theme.strong);
   root.style.setProperty("--accent-soft", theme.soft);
@@ -33,11 +39,17 @@ function applyAppearance(appearance: AppearancePreferences) {
   root.style.setProperty("--accent-action-alt", theme.actionAlt);
   root.style.setProperty("--accent-action-text", theme.actionText);
   root.style.setProperty("--appearance-background", appearance.background ? `url(${appearance.background})` : "none");
-  root.style.setProperty("--appearance-surface-opacity", String(appearance.surfaceOpacity / 100));
+  root.style.setProperty("--appearance-surface-opacity", "0.86");
+  root.style.setProperty("--appearance-background-strength", String(getBackgroundStrength(appearance.surfaceOpacity)));
   root.style.setProperty("--appearance-background-blur", `${appearance.backgroundBlur}px`);
+  root.style.setProperty("--chat-glow-brightness", String(appearance.chatGlowBrightness / 100));
+  root.style.setProperty("--chat-glow-motion", String(appearance.chatGlowMotion / 100));
+  root.style.setProperty("--chat-font-scale", String(getChatFontScale(appearance.chatFontSize)));
+  root.dataset.colorMode = colorMode;
+  root.style.colorScheme = colorMode;
   root.dataset.hasBackground = appearance.background ? "true" : "false";
   window.dispatchEvent(new CustomEvent(APPEARANCE_CHANGE_EVENT, {
-    detail: { accent: theme.accent, bubbleColorRange: appearance.bubbleColorRange, bubbleActivity: appearance.bubbleActivity },
+    detail: { accent: theme.accent, bubbleColorRange: appearance.bubbleColorRange, bubbleActivity: appearance.bubbleActivity, colorMode },
   }));
 }
 
@@ -108,6 +120,15 @@ export function AppearanceControl() {
   }, []);
 
   useEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const handleSystemModeChange = () => {
+      if (appearance.colorMode === "system") applyAppearance(appearance);
+    };
+    mediaQuery.addEventListener("change", handleSystemModeChange);
+    return () => mediaQuery.removeEventListener("change", handleSystemModeChange);
+  }, [appearance]);
+
+  useEffect(() => {
     const saved = window.localStorage.getItem(CHAT_BACKGROUND_STORAGE_KEY) === "enabled";
     void Promise.resolve().then(() => setChatBackgroundEnabled(saved));
     const handleChatBackgroundChange = (event: Event) => {
@@ -150,6 +171,10 @@ export function AppearanceControl() {
     updateAppearance({ ...currentAppearance, accent });
   }
 
+  function selectColorMode(colorMode: AppearanceMode) {
+    updateAppearance({ ...currentAppearance, colorMode });
+  }
+
   async function handleBackgroundUpload(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -175,6 +200,11 @@ export function AppearanceControl() {
             <span>主题色</span>
             <button className="appearance-icon-button" data-tooltip="恢复默认" type="button" aria-label="恢复默认外观" onClick={() => updateAppearance(defaultAppearance)}><RotateCcw size={16} /></button>
           </div>
+          <div className="appearance-mode-toggle" role="group" aria-label="外观模式">
+            <button className={currentAppearance.colorMode === "system" ? "is-selected" : ""} type="button" aria-pressed={currentAppearance.colorMode === "system"} onClick={() => selectColorMode("system")}><Monitor size={14} />跟随系统</button>
+            <button className={currentAppearance.colorMode === "light" ? "is-selected" : ""} type="button" aria-pressed={currentAppearance.colorMode === "light"} onClick={() => selectColorMode("light")}><Sun size={14} />日间</button>
+            <button className={currentAppearance.colorMode === "dark" ? "is-selected" : ""} type="button" aria-pressed={currentAppearance.colorMode === "dark"} onClick={() => selectColorMode("dark")}><Moon size={14} />夜间</button>
+          </div>
           <div className="appearance-swatches" role="group" aria-label="主题色选择">
             {ACCENT_SWATCHES.map((accent) => <button className={`appearance-swatch ${currentAppearance.accent.toLowerCase() === accent ? "is-selected" : ""}`} style={{ backgroundColor: accent }} type="button" aria-label={`选择主题色 ${accent}`} aria-pressed={currentAppearance.accent.toLowerCase() === accent} key={accent} onClick={() => selectAccent(accent)} />)}
             <label className="appearance-custom-color" data-tooltip="自定义颜色">
@@ -192,6 +222,24 @@ export function AppearanceControl() {
               <input type="range" min="0" max="200" step="5" value={currentAppearance.bubbleActivity} onChange={(event) => updateAppearance({ ...currentAppearance, bubbleActivity: Number(event.target.value) })} />
             </label>
           </> : null}
+          {visibility.showChatGlowControls ? <>
+            <div className="appearance-divider" />
+            <div className="appearance-panel-header"><span>工作台光晕</span></div>
+            <div className="appearance-sliders">
+              <label className="appearance-slider">
+                <span>光晕亮度 <output>{currentAppearance.chatGlowBrightness}%</output></span>
+                <input type="range" min="0" max="200" step="5" value={currentAppearance.chatGlowBrightness} onChange={(event) => updateAppearance({ ...currentAppearance, chatGlowBrightness: Number(event.target.value) })} />
+              </label>
+              <label className="appearance-slider">
+                <span>光晕动效 <output>{currentAppearance.chatGlowMotion}%</output></span>
+                <input type="range" min="0" max="200" step="5" value={currentAppearance.chatGlowMotion} onChange={(event) => updateAppearance({ ...currentAppearance, chatGlowMotion: Number(event.target.value) })} />
+              </label>
+            </div>
+            <label className="appearance-slider appearance-chat-font-size">
+              <span>字体大小 <output>{getChatFontLabel(currentAppearance.chatFontSize)} · {Math.round(getChatFontScale(currentAppearance.chatFontSize) * 100)}%</output></span>
+              <input type="range" min="0" max="4" step="1" value={currentAppearance.chatFontSize} aria-label="聊天工作台字体大小" onChange={(event) => updateAppearance({ ...currentAppearance, chatFontSize: Number(event.target.value) })} />
+            </label>
+          </> : null}
           {visibility.showBackgroundControls ? <>
             <div className="appearance-divider" />
             <div className="appearance-panel-header">
@@ -207,7 +255,7 @@ export function AppearanceControl() {
             </div>
             <div className="appearance-sliders">
               <label className="appearance-slider">
-                <span>背景透明度 <output>{currentAppearance.surfaceOpacity}%</output></span>
+                <span>背景显示强度 <output>{currentAppearance.surfaceOpacity}%</output></span>
                 <input type="range" min="20" max="100" value={currentAppearance.surfaceOpacity} onChange={(event) => updateAppearance({ ...currentAppearance, surfaceOpacity: Number(event.target.value) })} />
               </label>
               <label className="appearance-slider">

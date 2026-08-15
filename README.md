@@ -36,7 +36,7 @@
 
 ## 用户模型配置
 
-聊天工作台的“配置”抽屉可为当前账号保存一套模型连接。API Key 仅通过 HTTPS 请求提交，服务端使用 AES-256-GCM 加密保存，读取接口不会返回明文。
+聊天工作台的“配置”抽屉可为当前账号保存一套模型连接。常用连接方案只需选择并填写 API Key；选择“自定义预设”时可以自行填写 Provider、Base URL 和 Model。保存后配置写入当前账号的 MySQL 记录，下次登录会自动恢复“我的配置”。API Key 仅通过 HTTPS 请求提交，服务端使用 AES-256-GCM 加密保存，读取接口不会返回明文。
 
 在启用此功能前，为 `.env` 生成并填写 32 字节的加密主密钥：
 
@@ -48,7 +48,15 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 AI_CONFIG_ENCRYPTION_KEY=<generated-base64-key>
 ```
 
-用户配置的云端 Base URL 必须是 HTTPS 公网域名；`openai-compatible` 允许 `http://localhost`、`http://127.0.0.1` 和 `http://[::1]` 连接本机模型。服务端会拒绝凭据、私网、链路本地和内部主机名，并禁止跟随重定向。API Key 轮换通过重新保存新 Key 完成；主密钥整体轮换需要后续迁移工具支持。
+连接方案中的云端 Base URL 必须是 HTTPS 公网域名，服务端会拒绝凭据、私网、链路本地和内部主机名，并禁止跟随重定向。API Key 轮换通过重新保存新 Key 完成；主密钥整体轮换需要后续迁移工具支持。
+
+默认连接方案包括 OpenAI、Anthropic、Google、xAI、YYAPI、YYAPI Grok 4.5、OpenRouter 和 DeepSeek。YYAPI Grok 4.5（`yyapi-grok-01`）使用 `openai-compatible`、`https://www.yyapi.cloud/v1` 和 `grok-4.5`。固定兼容方案由 `USER_AI_ALLOWED_BASE_URLS` 白名单约束；自定义 OpenAI-compatible 地址允许 HTTPS 公网域名，但仍会拒绝凭据、查询参数、片段、IP、私网和内部主机名。
+
+### 测试并保存连接
+
+使用用户模型配置时，先确认 `.env` 已配置 `DATABASE_URL`、`AI_CONFIG_ENCRYPTION_KEY` 和 `USER_AI_ALLOWED_BASE_URLS`。登录后打开聊天工作台的“配置”抽屉，选择连接方案，核对只读的 Provider、Base URL 和 Model，输入对应平台的 API Key，点击“测试连接”。测试会发起一次最小文本请求，不保存配置，也不会创建聊天消息；测试成功后再点击“保存配置”，然后在聊天顶部选择“我的配置”发送普通文本消息。保存的配置绑定当前账号，下次登录会自动恢复。
+
+常见连接问题：YYAPI 必须使用 `https://www.yyapi.cloud/v1`，不能使用根地址；YYAPI Key 必须来自 YYAPI 控制台，不能替换成其他平台的 Key。401 通常是 Key 无效或 Provider 不匹配，404 通常是缺少 `/v1`、模型不存在或接口不兼容，429 通常是额度、频率或账户权限问题。Base URL 校验失败通常表示使用了 HTTP 公网地址、IP/内网地址、账号信息、查询参数或片段。测试请求会产生极少量模型调用费用。
 
 ## 模型预设
 
@@ -79,5 +87,7 @@ npm run db:migrate   # 执行 migration
 ```
 
 账号管理接口：`PATCH /api/me/password` 修改密码（请求体为 `currentPassword`、`newPassword`），`DELETE /api/me` 软删除当前账号（请求体为 `password`）。软删除会撤销全部会话、保留历史聊天和图片数据，并释放原用户名供重新注册。
+
+个人资料接口：`GET /api/me/profile` 读取当前账号头像状态，`PUT/GET/DELETE /api/me/avatar` 上传、读取和删除头像。头像由服务端校验为 512×512 的 JPEG、PNG 或 WebP，统一保存为受控目录中的 WebP 文件，不写入消息附件表。
 
 图片会保存至 `UPLOAD_DIR`（默认 `data/uploads`），该目录与 `.env` 均已排除在 Git 之外。此项目按本机使用设计；请勿在未增加访问控制、HTTPS 和注册策略前公开部署。

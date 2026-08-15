@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { decryptApiKey, encryptApiKey, normalizeBaseUrl, toUserAiPreset, validateUserAiConfig } from "@/lib/user-ai-config";
+import { getUserAiConnectionPresets } from "@/lib/config";
+import { CUSTOM_USER_AI_PRESET_ID, decryptApiKey, encryptApiKey, getPublicUserAiConnectionPresets, normalizeBaseUrl, toUserAiPreset, validateUserAiConfig } from "@/lib/user-ai-config";
 
 const originalKeys = process.env.AI_CONFIG_ENCRYPTION_KEYS;
 const originalActiveKeyId = process.env.AI_CONFIG_ACTIVE_KEY_ID;
@@ -37,6 +38,35 @@ describe("user AI configuration encryption", () => {
 });
 
 describe("user AI configuration validation", () => {
+  it("exposes the fixed connection catalog", () => {
+    expect(getUserAiConnectionPresets()).toEqual([
+      { id: "openai", label: "OpenAI", provider: "openai", baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini" },
+      { id: "anthropic", label: "Anthropic", provider: "anthropic", baseUrl: "https://api.anthropic.com", model: "claude-sonnet-4-5" },
+      { id: "google", label: "Google", provider: "google", baseUrl: "https://generativelanguage.googleapis.com", model: "gemini-2.5-flash" },
+      { id: "xai", label: "xAI", provider: "xai", baseUrl: "https://api.x.ai/v1", model: "grok-4" },
+      { id: "yyapi", label: "YYAPI", provider: "openai-compatible", baseUrl: "https://www.yyapi.cloud/v1", model: "grok-4" },
+      { id: "yyapi-grok-01", label: "YYAPI Grok 4.5", provider: "openai-compatible", baseUrl: "https://www.yyapi.cloud/v1", model: "grok-4.5" },
+      { id: "openrouter", label: "OpenRouter", provider: "openai-compatible", baseUrl: "https://openrouter.ai/api/v1", model: "openai/gpt-4o-mini" },
+      { id: "deepseek", label: "DeepSeek", provider: "openai-compatible", baseUrl: "https://api.deepseek.com/v1", model: "deepseek-chat" },
+    ]);
+  });
+
+  it("adds an editable custom connection option", () => {
+    expect(getPublicUserAiConnectionPresets()).toContainEqual({
+      id: CUSTOM_USER_AI_PRESET_ID,
+      label: "自定义预设",
+      provider: "openai-compatible",
+      baseUrl: "",
+      model: "",
+    });
+  });
+
+  it("uses the saved custom name for the account connection and chat preset", () => {
+    const config = { presetId: CUSTOM_USER_AI_PRESET_ID, name: "我的 YYAPI", provider: "openai-compatible" as const, baseUrl: "https://www.yyapi.cloud/v1", model: "grok-4", apiKeyConfigured: true as const, apiKeyLast4: "1234" };
+    expect(getPublicUserAiConnectionPresets(config).find((preset) => preset.id === CUSTOM_USER_AI_PRESET_ID)?.label).toBe("我的 YYAPI");
+    expect(toUserAiPreset(config)).toEqual({ id: "user-config", label: "我的 YYAPI", model: "grok-4", supportsImages: false });
+  });
+
   it("only accepts a normalized allowlisted compatible endpoint", () => {
     process.env.USER_AI_ALLOWED_BASE_URLS = JSON.stringify(["https://www.yyapi.cloud/v1"]);
     expect(normalizeBaseUrl("https://www.yyapi.cloud/v1/")).toBe("https://www.yyapi.cloud/v1");
@@ -49,6 +79,22 @@ describe("user AI configuration validation", () => {
     process.env.USER_AI_ALLOWED_BASE_URLS = JSON.stringify(["https://www.yyapi.cloud/v1"]);
     expect(() => validateUserAiConfig({ provider: "openai-compatible", baseUrl: "https://unapproved.example/v1", model: "model" })).toThrow("未获管理员授权");
     expect(() => validateUserAiConfig({ provider: "openai", baseUrl: "https://www.yyapi.cloud/v1", model: "gpt-4o-mini" })).toThrow("官方 Base URL");
+  });
+
+  it("allows a safe public custom compatible endpoint without weakening SSRF checks", () => {
+    process.env.USER_AI_ALLOWED_BASE_URLS = JSON.stringify(["https://www.yyapi.cloud/v1"]);
+    expect(validateUserAiConfig(
+      { provider: "openai-compatible", baseUrl: "https://api.example.com/v1", model: "custom-model" },
+      { allowUnlistedCompatibleUrl: true },
+    )).toMatchObject({ baseUrl: "https://api.example.com/v1" });
+    expect(() => validateUserAiConfig(
+      { provider: "openai-compatible", baseUrl: "https://192.168.1.8/v1", model: "custom-model" },
+      { allowUnlistedCompatibleUrl: true },
+    )).toThrow("内网地址");
+    expect(() => validateUserAiConfig(
+      { provider: "openai-compatible", baseUrl: "http://127.0.0.1:11434/v1", model: "custom-model" },
+      { allowUnlistedCompatibleUrl: true },
+    )).toThrow("HTTPS 公网域名");
   });
 
   it("exposes a configured user connection as a non-image virtual preset", () => {

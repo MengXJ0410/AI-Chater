@@ -18,10 +18,21 @@ export const deleteAccountSchema = z.object({
 });
 
 export const userAiConfigSchema = z.object({
-  provider: aiProviderSchema,
-  baseUrl: z.string().trim().max(512).default(""),
-  model: z.string().trim().min(1, "请输入模型名称。").max(160, "模型名称不能超过 160 个字符。"),
+  presetId: z.string().trim().min(1, "请选择连接方案。").max(64, "连接方案无效。"),
+  name: z.string().trim().min(1, "请输入配置名称。").max(80, "配置名称不能超过 80 个字符。").optional(),
+  provider: aiProviderSchema.optional(),
+  baseUrl: z.string().trim().max(512, "Base URL 不能超过 512 个字符。").optional(),
+  model: z.string().trim().max(160, "模型名称不能超过 160 个字符。").optional(),
   apiKey: z.string().trim().min(1, "请输入 API Key。").max(4096, "API Key 不能超过 4096 个字符。").optional(),
+}).strict().superRefine((value, context) => {
+  const customFields = [value.name, value.provider, value.baseUrl, value.model];
+  if (value.presetId === "custom") {
+    if (!value.provider) context.addIssue({ code: "custom", path: ["provider"], message: "请选择 Provider。" });
+    if (!value.baseUrl) context.addIssue({ code: "custom", path: ["baseUrl"], message: "请输入 Base URL。" });
+    if (!value.model) context.addIssue({ code: "custom", path: ["model"], message: "请输入模型名称。" });
+  } else if (customFields.some((field) => field !== undefined)) {
+    context.addIssue({ code: "custom", message: "固定连接方案不接受自定义 Provider、Base URL 或 Model。" });
+  }
 });
 
 export function normalizeUsername(username: string) {
@@ -43,4 +54,31 @@ export const chatSchema = z.object({
   attachmentIds: z.array(z.string().uuid()).max(4).default([]),
 }).refine((value) => value.text.length > 0 || value.attachmentIds.length > 0, {
   message: "请输入消息或添加图片。",
+});
+
+export const imageProviderSchema = z.enum(["xai-compatible", "openai-compatible"]);
+export const imageResolutionSchema = z.enum(["1k", "2k"]);
+export const imageQualitySchema = z.enum(["low", "medium", "high"]);
+export const imageAspectRatioSchema = z.enum(["1:1", "3:2", "2:3", "4:3", "3:4", "4:5", "5:4", "16:9", "9:16", "2:1", "1:2"]);
+
+export const imageConfigSchema = z.object({
+  name: z.string().trim().min(1, "请输入生图配置名称。").max(80, "生图配置名称不能超过 80 个字符。"),
+  provider: imageProviderSchema,
+  baseUrl: z.string().trim().max(512, "Base URL 不能超过 512 个字符。"),
+  model: z.string().trim().min(1, "请输入图片模型名称。").max(160, "模型名称不能超过 160 个字符。"),
+  apiKey: z.string().trim().min(1, "请输入 API Key。").max(4096, "API Key 不能超过 4096 个字符。").optional(),
+}).strict();
+
+export const imageGenerationSchema = z.object({
+  requestId: z.string().uuid(),
+  conversationId: z.string().uuid(),
+  imagePresetId: z.literal("user-image-config"),
+  prompt: z.string().trim().min(1, "请输入生图提示词。").max(4000, "提示词不能超过 4000 个字符。"),
+  referenceAttachmentIds: z.array(z.string().uuid()).max(4).default([]),
+  aspectRatio: imageAspectRatioSchema.default("1:1"),
+  resolution: imageResolutionSchema.default("1k"),
+  quality: imageQualitySchema.default("high"),
+  source: z.literal("image-mode").default("image-mode"),
+}).strict().superRefine((value, context) => {
+  if (value.referenceAttachmentIds.length) context.addIssue({ code: "custom", path: ["referenceAttachmentIds"], message: "首期暂不支持参考图编辑。" });
 });

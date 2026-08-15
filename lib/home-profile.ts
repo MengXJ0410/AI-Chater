@@ -4,6 +4,8 @@ export type HomeAuthorProfile = {
   avatarSrc: string;
   githubUrl: string;
   bilibiliUrl: string;
+  csdnUrl: string;
+  WebUrl4: string;
 };
 
 export const HOME_AUTHOR_PROFILE: HomeAuthorProfile = {

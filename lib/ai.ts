@@ -3,6 +3,7 @@ import { createGoogle } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createXai } from "@ai-sdk/xai";
+import { generateText } from "ai";
 import type { LanguageModel, ModelMessage } from "ai";
 import { getAiPresets, type AiPreset, type AiProvider } from "@/lib/config";
 import { readImage } from "@/lib/uploads";
@@ -63,6 +64,30 @@ const providerAdapters: Record<AiProvider, ProviderAdapter> = {
 
 export function getLanguageModel(connection: ModelConnection): LanguageModel {
   return providerAdapters[connection.provider].create(connection);
+}
+
+export function logModelError(error: unknown) {
+  if (error instanceof Error) {
+    const statusCode = typeof error === "object" && error !== null && "statusCode" in error && typeof error.statusCode === "number"
+      ? error.statusCode
+      : undefined;
+    console.error("AI model request failed", { name: error.name, statusCode });
+    return;
+  }
+  console.error("AI model request failed", { type: typeof error });
+}
+
+export function modelStreamErrorHandler(error: unknown): void {
+  logModelError(error);
+}
+
+export async function testModelConnection(connection: ModelConnection, abortSignal: AbortSignal) {
+  await generateText({
+    model: getLanguageModel(connection),
+    messages: [{ role: "user", content: "Reply with OK only." }],
+    maxOutputTokens: 1,
+    abortSignal,
+  });
 }
 
 export async function toModelMessages(rows: Array<{ role: "user" | "assistant"; parts: MessagePart[]; mimeTypes?: Map<string, string>; storageKeys?: Map<string, string> }>): Promise<ModelMessage[]> {

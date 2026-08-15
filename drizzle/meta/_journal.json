@@ -22,6 +22,34 @@
       "when": 1786730917557,
       "tag": "0002_tan_robbie_robertson",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1786777423711,
+      "tag": "0003_lonely_human_fly",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1786780882886,
+      "tag": "0004_daffy_ezekiel_stane",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1786786536158,
+      "tag": "0005_jittery_rumiko_fujikawa",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1786802307552,
+      "tag": "0006_clumsy_blizzard",
+      "breakpoints": true
     }
   ]
 }
