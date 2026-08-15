@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getImageRequestError, normalizeImageCapabilities } from "@/lib/image-generation-client";
+import { getImageGenerationFailureMessage, getImageRequestError, normalizeImageCapabilities } from "@/lib/image-generation-client";
 
 describe("image generation client", () => {
   it("normalizes server capabilities without inventing unsupported options", () => {
@@ -12,5 +12,12 @@ describe("image generation client", () => {
   it("uses a clear unavailable message for missing backend endpoints", () => {
     expect(getImageRequestError(404)).toContain("尚未接入");
     expect(getImageRequestError(400, "提示词不能为空")).toBe("提示词不能为空");
+    expect(getImageRequestError(404, "任务不存在。")).toBe("任务不存在。");
+  });
+
+  it("maps sanitized generation error codes to actionable frontend messages", () => {
+    expect(getImageGenerationFailureMessage("UPSTREAM_AUTH")).toContain("API Key");
+    expect(getImageGenerationFailureMessage("WORKER_INTERRUPTED")).toContain("worker");
+    expect(getImageGenerationFailureMessage("UNKNOWN")).toContain("生图任务失败");
   });
 });

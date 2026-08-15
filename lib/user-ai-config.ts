@@ -1,7 +1,7 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "crypto";
+import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from "crypto";
 import { lookup } from "dns/promises";
 import { isIP } from "net";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { getUserAiConnectionPresets, USER_AI_PRESET_ID, type AiProvider, type PublicAiPreset, type UserAiConnectionPreset } from "@/lib/config";
 import { getDb } from "@/lib/db";
 import { userAiConfigs } from "@/lib/db/schema";
@@ -266,9 +266,9 @@ export function decryptApiKey(encrypted: Pick<typeof userAiConfigs.$inferSelect,
 }
 
 function toPublicConfig(row: typeof userAiConfigs.$inferSelect): PublicUserAiConfig {
-  const storedPreset = row.presetId === CUSTOM_USER_AI_PRESET_ID
+  const storedPreset = row.connectionPresetId === CUSTOM_USER_AI_PRESET_ID
     ? CUSTOM_USER_AI_PRESET_ID
-    : getConnectionPreset(row.presetId ?? "")?.id;
+    : getConnectionPreset(row.connectionPresetId ?? "")?.id;
   return {
     presetId: storedPreset ?? matchingConnectionPreset(row)?.id ?? LEGACY_PRESET_ID,
     name: row.name ?? undefined,
@@ -289,11 +289,11 @@ export function toUserAiPreset(config: PublicUserAiConfig): PublicAiPreset {
 }
 
 export async function getPublicUserAiConfig(userId: string) {
-  const rows = await getDb().select().from(userAiConfigs).where(eq(userAiConfigs.userId, userId)).limit(1);
+  const rows = await getDb().select().from(userAiConfigs).where(eq(userAiConfigs.userId, userId)).orderBy(desc(userAiConfigs.updatedAt)).limit(1);
   return rows[0] ? toPublicConfig(rows[0]) : null;
 }
 
-function resolveInput(input: UserAiConfigInput | LegacyUserAiConfigInput) {
+export function resolveUserAiInput(input: UserAiConfigInput | LegacyUserAiConfigInput) {
   if ("presetId" in input) {
     if (input.presetId === CUSTOM_USER_AI_PRESET_ID) {
       if (!input.provider || !input.baseUrl || !input.model) throw new RequestError("自定义预设需要填写 Provider、Base URL 和 Model。");
@@ -310,19 +310,19 @@ function resolveInput(input: UserAiConfigInput | LegacyUserAiConfigInput) {
 }
 
 export async function resolveUserAiModelConfig(userId: string, input: UserAiConfigInput) {
-  const resolved = resolveInput(input);
+  const resolved = resolveUserAiInput(input);
   const { apiKey, provider, baseUrl, model } = resolved;
-  const existing = await getDb().select().from(userAiConfigs).where(eq(userAiConfigs.userId, userId)).limit(1);
+  const existing = await getDb().select().from(userAiConfigs).where(eq(userAiConfigs.userId, userId)).orderBy(desc(userAiConfigs.updatedAt)).limit(1);
   if (!apiKey && !existing[0]) throw new RequestError("首次测试必须填写 API Key。");
   const resolvedApiKey = apiKey ?? decryptApiKey(existing[0]!);
   return { provider, baseUrl, model, apiKey: resolvedApiKey } satisfies UserAiModelConfig;
 }
 
 export async function saveUserAiConfig(userId: string, input: UserAiConfigInput | LegacyUserAiConfigInput) {
-  const resolved = resolveInput(input);
+  const resolved = resolveUserAiInput(input);
   const { apiKey, presetId, name, provider, baseUrl, model } = resolved;
   const normalized = { provider, baseUrl, model };
-  const existing = await getDb().select().from(userAiConfigs).where(eq(userAiConfigs.userId, userId)).limit(1);
+  const existing = await getDb().select().from(userAiConfigs).where(eq(userAiConfigs.userId, userId)).orderBy(desc(userAiConfigs.updatedAt)).limit(1);
   if (!apiKey && !existing[0]) throw new RequestError("首次保存必须填写 API Key。");
 
   let encrypted = apiKey ? encryptApiKey(apiKey) : existing[0]!;
@@ -330,8 +330,8 @@ export async function saveUserAiConfig(userId: string, input: UserAiConfigInput 
     encrypted = encryptApiKey(decryptApiKey(existing[0]));
   }
   const values = {
-    presetId,
-    name: presetId === CUSTOM_USER_AI_PRESET_ID ? (name ?? existing[0]?.name ?? null) : null,
+    connectionPresetId: presetId,
+    name: name ?? existing[0]?.name ?? "我的对话配置",
     ...normalized,
     apiKeyCiphertext: encrypted.apiKeyCiphertext,
     apiKeyIv: encrypted.apiKeyIv,
@@ -340,32 +340,33 @@ export async function saveUserAiConfig(userId: string, input: UserAiConfigInput 
     apiKeyLast4: apiKey ? apiKey.slice(-4) : existing[0]!.apiKeyLast4,
   };
   if (existing[0]) {
-    await getDb().update(userAiConfigs).set(values).where(eq(userAiConfigs.userId, userId));
+    await getDb().update(userAiConfigs).set(values).where(eq(userAiConfigs.id, existing[0].id));
     return toPublicConfigValues({ presetId, name: values.name ?? undefined, ...normalized, baseUrl: normalized.baseUrl ?? "", apiKeyLast4: values.apiKeyLast4 });
   }
 
-  await getDb().insert(userAiConfigs).values({ userId, ...values });
+  await getDb().insert(userAiConfigs).values({ id: randomUUID(), userId, ...values });
   return toPublicConfigValues({ presetId, name: values.name ?? undefined, ...normalized, baseUrl: normalized.baseUrl ?? "", apiKeyLast4: values.apiKeyLast4 });
 }
 
 export async function deleteUserAiConfig(userId: string) {
-  await getDb().delete(userAiConfigs).where(eq(userAiConfigs.userId, userId));
+  const existing = await getDb().select({ id: userAiConfigs.id }).from(userAiConfigs).where(eq(userAiConfigs.userId, userId)).orderBy(desc(userAiConfigs.updatedAt)).limit(1);
+  if (existing[0]) await getDb().delete(userAiConfigs).where(eq(userAiConfigs.id, existing[0].id));
 }
 
 export async function getUserAiModelConfig(userId: string): Promise<UserAiModelConfig | null> {
-  const rows = await getDb().select().from(userAiConfigs).where(eq(userAiConfigs.userId, userId)).limit(1);
+  const rows = await getDb().select().from(userAiConfigs).where(eq(userAiConfigs.userId, userId)).orderBy(desc(userAiConfigs.updatedAt)).limit(1);
   const row = rows[0];
   if (!row) return null;
 
   const config = validateUserAiConfig(
     { provider: row.provider, baseUrl: row.baseUrl ?? "", model: row.model },
-    { allowUnlistedCompatibleUrl: row.presetId === CUSTOM_USER_AI_PRESET_ID },
+    { allowUnlistedCompatibleUrl: row.connectionPresetId === CUSTOM_USER_AI_PRESET_ID },
   );
   const apiKey = decryptApiKey(row);
   const activeKeyId = getEncryptionKeyring().activeKeyId;
   if (row.encryptionKeyId !== activeKeyId) {
     const reencrypted = encryptApiKey(apiKey);
-    await getDb().update(userAiConfigs).set(reencrypted).where(eq(userAiConfigs.userId, userId));
+    await getDb().update(userAiConfigs).set(reencrypted).where(eq(userAiConfigs.id, row.id));
   }
   return { ...config, apiKey };
 }

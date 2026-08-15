@@ -3,12 +3,13 @@ import { tmpdir } from "os";
 import path from "path";
 import sharp from "sharp";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { generateConfiguredImage } from "@/lib/ai-image";
+import { generateConfiguredImage, logImageError } from "@/lib/ai-image";
 import { imageCapabilities, validateImageConnection } from "@/lib/image-config";
 import { readImage, removeImages, saveGeneratedPng } from "@/lib/uploads";
 import { imageConfigSchema, imageGenerationSchema } from "@/lib/validators";
 
 const originalAllowedUrls = process.env.USER_AI_ALLOWED_BASE_URLS;
+const originalAllowedOutputHosts = process.env.USER_IMAGE_ALLOWED_OUTPUT_HOSTS;
 const originalUploadDir = process.env.UPLOAD_DIR;
 const pngBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl9sAAAAASUVORK5CYII=";
 
@@ -16,6 +17,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
   if (originalAllowedUrls === undefined) delete process.env.USER_AI_ALLOWED_BASE_URLS;
   else process.env.USER_AI_ALLOWED_BASE_URLS = originalAllowedUrls;
+  if (originalAllowedOutputHosts === undefined) delete process.env.USER_IMAGE_ALLOWED_OUTPUT_HOSTS;
+  else process.env.USER_IMAGE_ALLOWED_OUTPUT_HOSTS = originalAllowedOutputHosts;
   if (originalUploadDir === undefined) delete process.env.UPLOAD_DIR;
   else process.env.UPLOAD_DIR = originalUploadDir;
 });
@@ -71,6 +74,42 @@ describe("image provider adapters", () => {
     }, AbortSignal.timeout(5_000));
     expect(body).toMatchObject({ model: "image-model", size: "864x1536", n: 1 });
   });
+
+  it("downloads allowlisted URL outputs and converts them for the SDK", async () => {
+    process.env.USER_IMAGE_ALLOWED_OUTPUT_HOSTS = JSON.stringify(["example.com"]);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "https://example.com/output.png") {
+        return new Response(Buffer.from(pngBase64, "base64"), { status: 200, headers: { "Content-Type": "image/png" } });
+      }
+      return new Response(JSON.stringify({ data: [{ url: "https://example.com/output.png" }] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await generateConfiguredImage({ provider: "openai-compatible", baseUrl: "http://127.0.0.1:11434/v1", model: "image-model", apiKey: "test-key" }, {
+      prompt: "draw", aspectRatio: "1:1", resolution: "1k", quality: "high",
+    }, AbortSignal.timeout(5_000));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.bytes.byteLength).toBeGreaterThan(0);
+  });
+
+  it("logs only sanitized image error metadata", () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    logImageError(Object.assign(new Error("secret-key-in-upstream-body"), { statusCode: 401 }), {
+      generationId: "generation-id",
+      errorCode: "UPSTREAM_AUTH",
+    });
+    expect(spy).toHaveBeenCalledWith("AI image request failed", {
+      generationId: "generation-id",
+      errorCode: "UPSTREAM_AUTH",
+      name: "Error",
+      statusCode: "401",
+    });
+    expect(JSON.stringify(spy.mock.calls)).not.toContain("secret-key-in-upstream-body");
+    spy.mockRestore();
+  });
 });
 
 describe("generated image storage", () => {
@@ -86,5 +125,10 @@ describe("generated image storage", () => {
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
+  });
+
+  it("rejects invalid and oversized generated outputs", async () => {
+    await expect(saveGeneratedPng(Buffer.from("not-an-image"))).rejects.toThrow("图片格式无效");
+    await expect(saveGeneratedPng(new Uint8Array(20 * 1024 * 1024 + 1))).rejects.toThrow("图片超过大小限制");
   });
 });

@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 
 export class RequestError extends Error {
-  constructor(message: string, readonly status = 400) {
+  constructor(message: string, readonly status = 400, readonly headers?: HeadersInit) {
     super(message);
     this.name = "RequestError";
   }
 }
 
-export function errorResponse(message: string, status = 400) {
-  return NextResponse.json({ error: message }, { status });
+export function errorResponse(message: string, status = 400, headers?: HeadersInit) {
+  return NextResponse.json({ error: message }, { status, headers });
 }
 
 export function assertSameOrigin(request: Request) {

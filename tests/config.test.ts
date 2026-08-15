@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { modelStreamErrorHandler, testModelConnection } from "@/lib/ai";
 import { getAiPresets, getUserAiConnectionPresets } from "@/lib/config";
 import { decryptApiKey, encryptApiKey, normalizeBaseUrl, validateUserAiConfig } from "@/lib/user-ai-config";
-import { chatSchema, credentialsSchema, userAiConfigSchema } from "@/lib/validators";
+import { chatSchema, credentialsSchema, modelConfigCreateSchema, modelConfigUpdateSchema, userAiConfigSchema } from "@/lib/validators";
 
 const originalPresets = process.env.AI_PRESETS_JSON;
 const originalEncryptionKey = process.env.AI_CONFIG_ENCRYPTION_KEY;
@@ -70,6 +70,14 @@ describe("request validation", () => {
     expect(userAiConfigSchema.parse({ presetId: "custom", name: "我的中转站", provider: "openai-compatible", baseUrl: "https://api.example.com/v1", model: "custom-model" })).toMatchObject({ name: "我的中转站" });
     expect(() => userAiConfigSchema.parse({ presetId: "yyapi", name: "错误命名", apiKey: "key" })).toThrow("固定连接方案不接受");
     expect(() => userAiConfigSchema.parse({ presetId: "custom", provider: "openai-compatible", model: "custom-model" })).toThrow("请输入 Base URL");
+  });
+
+  it("validates multi-config payloads and resolves fixed connections server-side", () => {
+    const fixed = modelConfigCreateSchema.parse({ kind: "chat", name: "YYAPI 工作连接", connectionPresetId: "yyapi-grok-01", apiKey: "test-key" });
+    expect(fixed).toMatchObject({ kind: "chat", connectionPresetId: "yyapi-grok-01" });
+    expect(modelConfigUpdateSchema.parse({ kind: "chat", name: "改名后的连接", connectionPresetId: "yyapi-grok-01" }).apiKey).toBeUndefined();
+    expect(() => modelConfigCreateSchema.parse({ kind: "image", name: "图片", provider: "openai-compatible", baseUrl: "https://api.example.com/v1", model: "image-model" })).toThrow("首次创建必须填写 API Key");
+    expect(() => modelConfigCreateSchema.parse({ kind: "chat", name: "不完整自定义", connectionPresetId: "custom", apiKey: "test-key" })).toThrow("自定义对话配置");
   });
 
   it("encrypts API keys and rejects tampered ciphertext", () => {

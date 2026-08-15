@@ -9,10 +9,12 @@ import { Markdown } from "@/components/markdown";
 import { ChatAmbientLayer } from "@/components/chat-ambient-layer";
 import { UserAvatar } from "@/components/user-avatar";
 import { ImageWorkspace } from "@/components/image-workspace";
+import { SavedConfigList } from "@/components/saved-config-list";
 import { CHAT_BACKGROUND_CHANGE_EVENT, CHAT_BACKGROUND_STORAGE_KEY } from "@/lib/appearance";
 import { CHAT_ENTRY_READY_EVENT, CHAT_ENTRY_STORAGE_KEY, isPendingChatEntry } from "@/lib/chat-entry-transition";
 import { appendStreamText, getGenerationLabel, type GenerationStatus } from "@/lib/chat-message";
 import { getFollowScrollTop, isNearScrollBottom } from "@/lib/chat-ambient";
+import { createLegacyWorkspaceConfigs, isWorkspaceConfigFallbackStatus, normalizeSavedWorkspaceConfigs, type SavedWorkspaceConfig, type WorkspaceConfigFilter, type WorkspaceConfigMode } from "@/lib/workspace-configs";
 import type { MessagePart } from "@/lib/messages";
 
 type User = { id: string; username: string; avatarUrl?: string | null };
@@ -23,10 +25,12 @@ type ConnectionPreset = { id: string; label: string; provider: string; baseUrl: 
 type CustomDraft = { provider: "openai" | "openai-compatible" | "xai" | "anthropic" | "google"; baseUrl: string; model: string };
 type PendingAttachment = { id: string; originalName: string };
 type ToolId = "chat" | "image" | "video" | "agent";
-type SavedAiConfig = ConnectionPreset & { presetId: string; apiKeyConfigured: true; apiKeyLast4: string };
+type SavedAiConfig = ConnectionPreset & { presetId: string; name?: string; apiKeyConfigured: true; apiKeyLast4: string };
 type ImageConfigDraft = { name: string; provider: "xai-compatible" | "openai-compatible"; baseUrl: string; model: string };
+type SavedImageConfig = ImageConfigDraft & { apiKeyConfigured: true; apiKeyLast4: string };
 
 const SIDEBAR_STORAGE_KEY = "ai-chater-chat-sidebar-v1";
+const IMAGE_PRESET_STORAGE_KEY = "ai-chater-image-preset";
 const TOOL_ITEMS: Array<{ id: ToolId; label: string; description: string; icon: typeof Command }> = [
   { id: "chat", label: "对话", description: "与模型进行连续对话", icon: Command },
   { id: "image", label: "生图", description: "从文字生成图像", icon: FileImage },
@@ -63,14 +67,24 @@ export function ChatClient({ user }: { user: User }) {
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [connectionPresets, setConnectionPresets] = useState<ConnectionPreset[]>([]);
   const [connectionPresetId, setConnectionPresetId] = useState("");
+  const [chatConfigName, setChatConfigName] = useState("我的对话配置");
   const [customDraft, setCustomDraft] = useState<CustomDraft>({ provider: "openai-compatible", baseUrl: "", model: "" });
   const [apiKey, setApiKey] = useState("");
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [configNotice, setConfigNotice] = useState("");
   const [configError, setConfigError] = useState("");
   const [configTab, setConfigTab] = useState<"chat" | "image">("chat");
+  const [configView, setConfigView] = useState<"editor" | "saved">("editor");
+  const [savedConfigFilter, setSavedConfigFilter] = useState<WorkspaceConfigFilter>("all");
+  const [savedConfigs, setSavedConfigs] = useState<SavedWorkspaceConfig[]>([]);
+  const [savedConfigMode, setSavedConfigMode] = useState<WorkspaceConfigMode>("legacy");
+  const [savedConfigsError, setSavedConfigsError] = useState("");
+  const [isSavedConfigsLoading, setIsSavedConfigsLoading] = useState(false);
+  const [editingConfigId, setEditingConfigId] = useState<string | null>(null);
   const [imageConfigDraft, setImageConfigDraft] = useState<ImageConfigDraft>({ name: "我的生图模型", provider: "xai-compatible", baseUrl: "", model: "" });
   const [imageApiKey, setImageApiKey] = useState("");
+  const [imageConfigRevision, setImageConfigRevision] = useState(0);
+  const [preferredImagePresetId, setPreferredImagePresetId] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
@@ -83,18 +97,19 @@ export function ChatClient({ user }: { user: User }) {
   }, []);
 
   useEffect(() => {
-    if (!isConfigDrawerOpen || configTab !== "image") return;
+    if (!isConfigDrawerOpen || configView !== "editor" || configTab !== "image" || editingConfigId) return;
     let cancelled = false;
-    void requestJson<{ config?: ImageConfigDraft | null }>("/api/me/image-config")
-      .then((data) => { if (!cancelled && data.config) setImageConfigDraft(data.config); })
+    void requestJson<{ config?: SavedImageConfig | null }>("/api/me/image-config")
+      .then((data) => { if (!cancelled && data.config) setImageConfigDraft({ name: data.config.name, provider: data.config.provider, baseUrl: data.config.baseUrl, model: data.config.model }); })
       .catch((cause) => { if (!cancelled) setConfigNotice(cause instanceof Error ? cause.message : "生图配置服务尚未接入。"); });
     return () => { cancelled = true; };
-  }, [configTab, isConfigDrawerOpen]);
+  }, [configTab, configView, editingConfigId, isConfigDrawerOpen]);
 
   useEffect(() => {
     void Promise.resolve().then(() => {
       setIsSidebarExpanded(window.localStorage.getItem(SIDEBAR_STORAGE_KEY) !== "collapsed");
       setIsChatBackgroundEnabled(window.localStorage.getItem(CHAT_BACKGROUND_STORAGE_KEY) === "enabled");
+      setPreferredImagePresetId(window.localStorage.getItem(IMAGE_PRESET_STORAGE_KEY) ?? "");
     });
   }, []);
 
@@ -116,6 +131,31 @@ export function ChatClient({ user }: { user: User }) {
   const isCustomConnection = connectionPresetId === "custom";
   const activeToolMeta = TOOL_ITEMS.find((item) => item.id === activeTool) ?? TOOL_ITEMS[0];
 
+  const loadSavedConfigs = useCallback(async () => {
+    setIsSavedConfigsLoading(true);
+    setSavedConfigsError("");
+    try {
+      const response = await fetch("/api/me/model-configs");
+      const payload = await response.json().catch(() => ({}));
+      if (response.ok) {
+        setSavedConfigs(normalizeSavedWorkspaceConfigs(payload.configs));
+        setSavedConfigMode("multi");
+        return;
+      }
+      if (!isWorkspaceConfigFallbackStatus(response.status)) throw new Error(payload.error ?? "读取我的配置失败。");
+      const [chatData, imageData] = await Promise.all([
+        requestJson<{ config: SavedAiConfig | null }>("/api/me/ai-config"),
+        requestJson<{ config: SavedImageConfig | null }>("/api/me/image-config"),
+      ]);
+      setSavedConfigs(createLegacyWorkspaceConfigs(chatData.config, imageData.config));
+      setSavedConfigMode("legacy");
+    } catch (cause) {
+      setSavedConfigsError(cause instanceof Error ? cause.message : "读取我的配置失败。");
+    } finally {
+      setIsSavedConfigsLoading(false);
+    }
+  }, []);
+
   const loadConversations = useCallback(async () => {
     const data = await requestJson<{ conversations: Conversation[] }>("/api/conversations");
     setConversations(data.conversations);
@@ -125,6 +165,11 @@ export function ChatClient({ user }: { user: User }) {
     const data = await requestJson<{ conversation: Conversation; messages: ChatMessage[] }>(`/api/conversations/${id}`);
     setMessages(data.messages);
   }, []);
+
+  useEffect(() => {
+    if (!isConfigDrawerOpen) return;
+    void Promise.resolve().then(loadSavedConfigs);
+  }, [configView, isConfigDrawerOpen, loadSavedConfigs]);
 
   useEffect(() => {
     const list = messageListRef.current;
@@ -154,6 +199,7 @@ export function ChatClient({ user }: { user: User }) {
         setConnectionPresets(configData.presets);
         if (configData.config) {
           setConnectionPresetId(configData.config.presetId);
+          setChatConfigName(configData.config.name || configData.config.label || "我的对话配置");
           if (configData.config.presetId === "custom") {
             setCustomDraft({ provider: configData.config.provider as CustomDraft["provider"], baseUrl: configData.config.baseUrl, model: configData.config.model });
           }
@@ -388,8 +434,12 @@ export function ChatClient({ user }: { user: User }) {
   async function saveImageConfig(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setConfigError(""); setConfigNotice("");
     try {
-      await requestJson("/api/me/image-config", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...imageConfigDraft, ...(imageApiKey ? { apiKey: imageApiKey } : {}) }) });
-      setImageApiKey(""); setConfigNotice("已保存生图配置。");
+      const payload = { kind: "image", ...imageConfigDraft, ...(imageApiKey ? { apiKey: imageApiKey } : {}) };
+      const isMultiEdit = savedConfigMode === "multi" && editingConfigId && !editingConfigId.startsWith("legacy-");
+      await requestJson(isMultiEdit ? `/api/me/model-configs/${editingConfigId}` : savedConfigMode === "multi" ? "/api/me/model-configs" : "/api/me/image-config", { method: isMultiEdit || savedConfigMode === "legacy" ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(savedConfigMode === "legacy" ? { ...imageConfigDraft, ...(imageApiKey ? { apiKey: imageApiKey } : {}) } : payload) });
+      setImageApiKey(""); setEditingConfigId(null); setImageConfigRevision((current) => current + 1); setConfigNotice("已保存生图配置。");
+      await loadSavedConfigs();
+      setConfigView("saved");
     } catch (cause) { setConfigError(cause instanceof Error ? cause.message : "生图配置服务尚未接入。"); }
   }
 
@@ -399,9 +449,15 @@ export function ChatClient({ user }: { user: User }) {
     catch (cause) { setConfigError(cause instanceof Error ? cause.message : "生图配置服务尚未接入。"); }
   }
 
-  async function clearImageConfig() {
+  async function clearImageConfig(skipConfirmation = false) {
+    if (!skipConfirmation && !window.confirm("确定删除这个生图配置吗？已保存的 API Key 也会一并删除。")) return;
     setConfigError("");
-    try { await requestJson("/api/me/image-config", { method: "DELETE" }); setImageApiKey(""); setImageConfigDraft({ name: "我的生图模型", provider: "xai-compatible", baseUrl: "", model: "" }); setConfigNotice("已删除生图配置。"); }
+    try {
+      const isMultiEdit = savedConfigMode === "multi" && editingConfigId && !editingConfigId.startsWith("legacy-");
+      await requestJson(isMultiEdit ? `/api/me/model-configs/${editingConfigId}` : "/api/me/image-config", { method: "DELETE" });
+      setImageApiKey(""); setEditingConfigId(null); setImageConfigDraft({ name: "我的生图模型", provider: "xai-compatible", baseUrl: "", model: "" }); setImageConfigRevision((current) => current + 1); setConfigNotice("已删除生图配置。");
+      await loadSavedConfigs();
+    }
     catch (cause) { setConfigError(cause instanceof Error ? cause.message : "生图配置服务尚未接入。"); }
   }
 
@@ -420,26 +476,47 @@ export function ChatClient({ user }: { user: User }) {
     setConfigError("");
     setConfigNotice("");
     try {
-      const payload = await requestJson<{ config: SavedAiConfig }>("/api/me/ai-config", {
-        method: "PUT",
+      const configPayload = getConfigPayload();
+      const multiConfigPayload = getMultiChatConfigPayload();
+      const isMultiEdit = savedConfigMode === "multi" && editingConfigId && !editingConfigId.startsWith("legacy-");
+      const payload = await requestJson<{ config: SavedAiConfig | SavedWorkspaceConfig }>(isMultiEdit ? `/api/me/model-configs/${editingConfigId}` : savedConfigMode === "multi" ? "/api/me/model-configs" : "/api/me/ai-config", {
+        method: isMultiEdit || savedConfigMode === "legacy" ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(getConfigPayload()),
+        body: JSON.stringify(savedConfigMode === "legacy" ? configPayload : multiConfigPayload),
       });
-      setConnectionPresetId(payload.config.presetId);
-      if (payload.config.presetId === "custom") {
-        setCustomDraft({ provider: payload.config.provider as CustomDraft["provider"], baseUrl: payload.config.baseUrl, model: payload.config.model });
+      if (savedConfigMode === "legacy") {
+        const saved = payload.config as SavedAiConfig;
+        setConnectionPresetId(saved.presetId);
+        if (saved.presetId === "custom") setCustomDraft({ provider: saved.provider as CustomDraft["provider"], baseUrl: saved.baseUrl, model: saved.model });
       }
       setConnectionPresets((current) => current.filter((preset) => !preset.readOnly));
       setApiKey("");
+      setEditingConfigId(null);
       setConfigNotice(`已保存服务端配置，API Key 末四位：${payload.config.apiKeyLast4}`);
-      await refreshPresets("user-config");
+      await refreshPresets(savedConfigMode === "multi" ? (payload.config as SavedWorkspaceConfig).runtimePresetId : "user-config");
+      await loadSavedConfigs();
+      setConfigView("saved");
     } catch (cause) {
       setConfigError(cause instanceof Error ? cause.message : "保存配置失败。");
     }
   }
 
   function getConfigPayload() {
-    return { presetId: connectionPresetId, ...(connectionPresetId === "custom" ? customDraft : {}), ...(apiKey ? { apiKey } : {}) };
+    const name = chatConfigName.trim() || selectedConnectionPreset?.label || "我的对话配置";
+    if (connectionPresetId === "custom") return { presetId: "custom", name, ...customDraft, ...(apiKey ? { apiKey } : {}) };
+    if (selectedConnectionPreset) return { presetId: "custom", name, provider: selectedConnectionPreset.provider, baseUrl: selectedConnectionPreset.baseUrl, model: selectedConnectionPreset.model, ...(apiKey ? { apiKey } : {}) };
+    return { presetId: connectionPresetId, ...(apiKey ? { apiKey } : {}) };
+  }
+
+  function getMultiChatConfigPayload() {
+    const connection = connectionPresetId === "custom" ? customDraft : selectedConnectionPreset;
+    return {
+      kind: "chat" as const,
+      name: chatConfigName.trim() || selectedConnectionPreset?.label || "我的对话配置",
+      connectionPresetId,
+      ...(connection ? { provider: connection.provider, baseUrl: connection.baseUrl, model: connection.model } : {}),
+      ...(apiKey ? { apiKey } : {}),
+    };
   }
 
   async function testConfig() {
@@ -461,18 +538,83 @@ export function ChatClient({ user }: { user: User }) {
     }
   }
 
-  async function clearConfig() {
+  async function clearConfig(skipConfirmation = false) {
+    if (!skipConfirmation && !window.confirm("确定删除这个对话配置吗？已保存的 API Key 也会一并删除。")) return;
     setConfigError("");
     try {
-      await requestJson("/api/me/ai-config", { method: "DELETE" });
+      const isMultiEdit = savedConfigMode === "multi" && editingConfigId && !editingConfigId.startsWith("legacy-");
+      await requestJson(isMultiEdit ? `/api/me/model-configs/${editingConfigId}` : "/api/me/ai-config", { method: "DELETE" });
       setConnectionPresetId(connectionPresets[0]?.id ?? "");
+      setChatConfigName("我的对话配置");
       setCustomDraft({ provider: "openai-compatible", baseUrl: "", model: "" });
       setConnectionPresets((current) => current.filter((preset) => !preset.readOnly));
       setApiKey("");
+      setEditingConfigId(null);
       setConfigNotice("已删除服务端模型配置。");
       await refreshPresets();
+      await loadSavedConfigs();
     } catch (cause) {
       setConfigError(cause instanceof Error ? cause.message : "清空配置失败。");
+    }
+  }
+
+  async function applySavedConfig(config: SavedWorkspaceConfig) {
+    setSavedConfigsError("");
+    try {
+      if (config.kind === "chat") {
+        await refreshPresets(config.runtimePresetId);
+        selectTool("chat");
+      } else {
+        setPreferredImagePresetId(config.runtimePresetId);
+        window.localStorage.setItem(IMAGE_PRESET_STORAGE_KEY, config.runtimePresetId);
+        setImageConfigRevision((current) => current + 1);
+        selectTool("image");
+      }
+      setIsConfigDrawerOpen(false);
+    } catch (cause) {
+      setSavedConfigsError(cause instanceof Error ? cause.message : "切换配置失败。");
+    }
+  }
+
+  function editSavedConfig(config: SavedWorkspaceConfig) {
+    setEditingConfigId(config.id);
+    setConfigView("editor");
+    setConfigTab(config.kind);
+    setConfigError("");
+    setConfigNotice(`API Key 已安全保存，末四位：${config.apiKeyLast4 || "未知"}。留空表示保持不变。`);
+    if (config.kind === "chat") {
+      const nextPresetId = config.connectionPresetId && connectionPresets.some((preset) => preset.id === config.connectionPresetId) ? config.connectionPresetId : "custom";
+      setConnectionPresetId(nextPresetId);
+      setChatConfigName(config.name);
+      setCustomDraft({ provider: config.provider as CustomDraft["provider"], baseUrl: config.baseUrl, model: config.model });
+      setApiKey("");
+    } else {
+      setImageConfigDraft({ name: config.name, provider: config.provider as ImageConfigDraft["provider"], baseUrl: config.baseUrl, model: config.model });
+      setImageApiKey("");
+    }
+  }
+
+  async function deleteSavedConfig(config: SavedWorkspaceConfig) {
+    if (!window.confirm(`确定删除“${config.name}”吗？已保存的 API Key 也会一并删除。`)) return;
+    setSavedConfigsError("");
+    try {
+      if (savedConfigMode === "legacy" || config.id.startsWith("legacy-")) {
+        if (config.kind === "chat") await clearConfig(true);
+        else await clearImageConfig(true);
+      } else {
+        await requestJson(`/api/me/model-configs/${config.id}`, { method: "DELETE" });
+        if (config.kind === "chat") await refreshPresets(config.runtimePresetId === presetId ? undefined : presetId);
+        else {
+          if (config.runtimePresetId === preferredImagePresetId) {
+            setPreferredImagePresetId("");
+            window.localStorage.removeItem(IMAGE_PRESET_STORAGE_KEY);
+          }
+          setImageConfigRevision((current) => current + 1);
+        }
+        await loadSavedConfigs();
+      }
+    } catch (cause) {
+      setSavedConfigsError(cause instanceof Error ? cause.message : "删除配置失败。");
     }
   }
 
@@ -527,7 +669,7 @@ export function ChatClient({ user }: { user: User }) {
           <div className="chat-toolbar-actions">{activeTool === "chat" ? <select className="model-select" value={presetId} onChange={(event) => choosePreset(event.target.value)} disabled={!presets.length || isSending}>{presets.length ? presets.map((preset) => <option value={preset.id} key={preset.id}>{preset.label} · {preset.model}</option>) : <option value="">未配置模型</option>}</select> : null}<button className="chat-account-trigger" title="账号面板" aria-label="打开账号面板" aria-expanded={isAccountPanelOpen} onClick={() => setIsAccountPanelOpen((current) => !current)}><UserAvatar className="chat-avatar" username={user.username} src={user.avatarUrl} /><span className="chat-account-trigger-name">{user.username}</span></button></div>
         </header>
 
-        {activeTool === "image" ? <ImageWorkspace conversationId={activeConversationId} ensureConversation={async () => activeConversationId ?? createConversation()} onOpenConfig={() => { setConfigTab("image"); setIsConfigDrawerOpen(true); }} /> : activeTool !== "chat" ? <div className="chat-placeholder"><div className="chat-placeholder-icon"><MoreHorizontal size={26} /></div><span className="chat-tool-eyebrow">{activeToolMeta.label}</span><h2>{activeToolMeta.description}</h2><p>这个功能正在准备中，之后会在这里成为你的新工作窗口。</p><button className="chat-primary-button" onClick={() => selectTool("chat")}><Command size={16} />返回对话</button></div> : <div className="chat-conversation-workspace">
+        {activeTool === "image" ? <ImageWorkspace configRevision={imageConfigRevision} preferredPresetId={preferredImagePresetId} onPreferredPresetChange={(id) => { setPreferredImagePresetId(id); window.localStorage.setItem(IMAGE_PRESET_STORAGE_KEY, id); }} conversationId={activeConversationId} ensureConversation={async () => activeConversationId ?? createConversation()} onOpenConfig={() => { setConfigView("editor"); setEditingConfigId(null); setConfigTab("image"); setIsConfigDrawerOpen(true); }} /> : activeTool !== "chat" ? <div className="chat-placeholder"><div className="chat-placeholder-icon"><MoreHorizontal size={26} /></div><span className="chat-tool-eyebrow">{activeToolMeta.label}</span><h2>{activeToolMeta.description}</h2><p>这个功能正在准备中，之后会在这里成为你的新工作窗口。</p><button className="chat-primary-button" onClick={() => selectTool("chat")}><Command size={16} />返回对话</button></div> : <div className="chat-conversation-workspace">
           <div className="message-scroll" ref={messageListRef}><div className="message-stream">
             {!messages.length ? <div className="empty-chat-state"><span><Sparkles size={22} /></span><strong>开始一段新对话</strong><small>输入问题，或从左侧切换其他工作功能。</small></div> : null}
             {messages.map((message) => <MessageView message={message} user={user} key={message.id} />)}
@@ -549,17 +691,20 @@ export function ChatClient({ user }: { user: User }) {
       </aside>
 
       <aside className={`chat-config-drawer ${isConfigDrawerOpen ? "is-open" : ""}`} aria-label="模型配置">
-        <div className="chat-drawer-header"><div><span className="chat-tool-eyebrow">工作台配置</span><h2>{configTab === "chat" ? "连接你的模型" : "连接生图模型"}</h2></div><button className="chat-icon-button" title="关闭配置" aria-label="关闭配置" onClick={() => setIsConfigDrawerOpen(false)}><X size={18} /></button></div>
-        <div className="chat-config-tabs" role="tablist" aria-label="模型配置类型"><button type="button" role="tab" aria-selected={configTab === "chat"} className={configTab === "chat" ? "is-active" : ""} onClick={() => { setConfigTab("chat"); setConfigError(""); }}>对话模型</button><button type="button" role="tab" aria-selected={configTab === "image"} className={configTab === "image" ? "is-active" : ""} onClick={() => { setConfigTab("image"); setConfigError(""); }}>生图模型</button></div>
+        <div className="chat-drawer-header"><div><span className="chat-tool-eyebrow">工作台配置</span><h2>{configView === "saved" ? "我的配置" : configTab === "chat" ? "连接你的模型" : "连接生图模型"}</h2></div><div className="chat-drawer-header-actions"><button className="chat-drawer-view-link" type="button" onClick={() => { setConfigView((current) => current === "editor" ? "saved" : "editor"); setConfigError(""); setSavedConfigsError(""); }}>{configView === "editor" ? ">>我的配置" : ">>前往配置"}</button><button className="chat-icon-button" title="关闭配置" aria-label="关闭配置" onClick={() => setIsConfigDrawerOpen(false)}><X size={18} /></button></div></div>
+        {configView === "saved" ? <SavedConfigList configs={savedConfigs} filter={savedConfigFilter} isLegacyMode={savedConfigMode === "legacy"} isLoading={isSavedConfigsLoading} error={savedConfigsError} activeChatPresetId={presetId} activeImagePresetId={preferredImagePresetId} onFilterChange={setSavedConfigFilter} onUse={(config) => void applySavedConfig(config)} onEdit={editSavedConfig} onDelete={(config) => void deleteSavedConfig(config)} /> : <>
+        <div className="chat-config-tabs" role="tablist" aria-label="模型配置类型"><button type="button" role="tab" aria-selected={configTab === "chat"} className={configTab === "chat" ? "is-active" : ""} onClick={() => { setConfigTab("chat"); setEditingConfigId(null); setConfigError(""); }}>对话模型</button><button type="button" role="tab" aria-selected={configTab === "image"} className={configTab === "image" ? "is-active" : ""} onClick={() => { setConfigTab("image"); setEditingConfigId(null); setConfigError(""); }}>生图模型</button></div>
         {configTab === "chat" ? <><p className="chat-drawer-intro">配置和密钥会加密保存在当前账号中。API Key 留空时保留已保存的密钥。</p>
         <form className="chat-config-form" onSubmit={saveConfig}>
+          <label>配置名称<input value={chatConfigName} maxLength={80} onChange={(event) => setChatConfigName(event.target.value)} placeholder="我的对话配置" /></label>
           <label>连接方案<select value={connectionPresetId} onChange={(event) => setConnectionPresetId(event.target.value)}>{connectionPresets.map((preset) => <option value={preset.id} key={preset.id} disabled={preset.readOnly}>{preset.label}</option>)}</select></label>
           {isCustomConnection ? <div className="chat-config-details"><label>Provider<select value={customDraft.provider} onChange={(event) => setCustomDraft((current) => ({ ...current, provider: event.target.value as CustomDraft["provider"] }))}><option value="openai-compatible">OpenAI Compatible</option><option value="openai">OpenAI</option><option value="xai">xAI</option><option value="anthropic">Anthropic</option><option value="google">Google</option></select></label><label>Base URL<input type="url" value={customDraft.baseUrl} onChange={(event) => setCustomDraft((current) => ({ ...current, baseUrl: event.target.value }))} placeholder="https://api.example.com/v1" /></label><label>Model<input value={customDraft.model} onChange={(event) => setCustomDraft((current) => ({ ...current, model: event.target.value }))} placeholder="模型 ID" /></label></div> : selectedConnectionPreset ? <div className="chat-config-details"><label>Provider<input value={selectedConnectionPreset.provider} readOnly /></label><label>Base URL<input value={selectedConnectionPreset.baseUrl} readOnly /></label><label>Model<input value={selectedConnectionPreset.model} readOnly /></label>{selectedConnectionPreset.readOnly ? <p className="chat-form-notice">这是旧账号的自定义配置。请选择新的连接方案后保存以迁移。</p> : null}</div> : null}
           <label>API Key<input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder="首次保存时必填" autoComplete="off" /></label>
           {configNotice && !apiKey ? <p className="chat-form-notice" role="status">{configNotice}</p> : null}
           {configError ? <p className="chat-form-error" role="alert">{configError}</p> : null}
-          <div className="chat-config-actions"><button className="chat-secondary-button" type="button" onClick={() => void clearConfig()}>删除配置</button><button className="chat-secondary-button" type="button" onClick={() => void testConfig()} disabled={isTestingConnection || isSending || !connectionPresetId || selectedConnectionPreset?.readOnly}><PlugZap size={16} />{isTestingConnection ? "测试中..." : "测试连接"}</button><button className="chat-primary-button" type="submit" disabled={!connectionPresetId || selectedConnectionPreset?.readOnly || isTestingConnection}>保存配置</button></div>
-        </form></> : <><p className="chat-drawer-intro">生图模型配置由后端独立管理，不会复用对话模型密钥。</p><form className="chat-config-form" onSubmit={saveImageConfig}><label>配置名称<input value={imageConfigDraft.name} onChange={(event) => setImageConfigDraft((current) => ({ ...current, name: event.target.value }))} placeholder="我的生图模型" /></label><label>Provider<select value={imageConfigDraft.provider} onChange={(event) => setImageConfigDraft((current) => ({ ...current, provider: event.target.value as ImageConfigDraft["provider"] }))}><option value="xai-compatible">xAI Compatible</option><option value="openai-compatible">OpenAI Compatible</option></select></label><label>Base URL<input type="url" value={imageConfigDraft.baseUrl} onChange={(event) => setImageConfigDraft((current) => ({ ...current, baseUrl: event.target.value }))} placeholder="https://api.example.com/v1" /></label><label>Image Model<input value={imageConfigDraft.model} onChange={(event) => setImageConfigDraft((current) => ({ ...current, model: event.target.value }))} placeholder="grok-imagine-image" /></label><label>API Key<input type="password" value={imageApiKey} onChange={(event) => setImageApiKey(event.target.value)} placeholder="首次保存时必填" autoComplete="off" /></label>{configNotice ? <p className="chat-form-notice" role="status">{configNotice}</p> : null}{configError ? <p className="chat-form-error" role="alert">{configError}</p> : null}<div className="chat-config-actions"><button className="chat-secondary-button" type="button" onClick={() => void clearImageConfig()}>删除配置</button><button className="chat-secondary-button" type="button" onClick={() => void testImageConfig()}><PlugZap size={16} />测试连接（可能收费）</button><button className="chat-primary-button" type="submit">保存配置</button></div></form></>}
+          <div className="chat-config-actions"><button className="chat-secondary-button" type="button" onClick={() => void clearConfig()}>删除配置</button><button className="chat-secondary-button" type="button" onClick={() => void testConfig()} disabled={isTestingConnection || isSending || !connectionPresetId || selectedConnectionPreset?.readOnly}><PlugZap size={16} />{isTestingConnection ? "测试中..." : "测试连接"}</button><button className="chat-primary-button" type="submit" disabled={!chatConfigName.trim() || !connectionPresetId || selectedConnectionPreset?.readOnly || isTestingConnection}>{editingConfigId ? "保存修改" : "保存配置"}</button></div>
+        </form></> : <><p className="chat-drawer-intro">生图模型配置由后端独立管理，不会复用对话模型密钥。</p><form className="chat-config-form" onSubmit={saveImageConfig}><label>配置名称<input value={imageConfigDraft.name} maxLength={80} onChange={(event) => setImageConfigDraft((current) => ({ ...current, name: event.target.value }))} placeholder="我的生图模型" /></label><label>Provider<select value={imageConfigDraft.provider} onChange={(event) => setImageConfigDraft((current) => ({ ...current, provider: event.target.value as ImageConfigDraft["provider"] }))}><option value="xai-compatible">xAI Compatible</option><option value="openai-compatible">OpenAI Compatible</option></select></label><label>Base URL<input type="url" value={imageConfigDraft.baseUrl} onChange={(event) => setImageConfigDraft((current) => ({ ...current, baseUrl: event.target.value }))} placeholder="https://api.example.com/v1" /></label><label>Image Model<input value={imageConfigDraft.model} onChange={(event) => setImageConfigDraft((current) => ({ ...current, model: event.target.value }))} placeholder="grok-imagine-image" /></label><label>API Key<input type="password" value={imageApiKey} onChange={(event) => setImageApiKey(event.target.value)} placeholder="首次保存时必填，留空保持原密钥" autoComplete="off" /></label>{configNotice ? <p className="chat-form-notice" role="status">{configNotice}</p> : null}{configError ? <p className="chat-form-error" role="alert">{configError}</p> : null}<div className="chat-config-actions"><button className="chat-secondary-button" type="button" onClick={() => void clearImageConfig()}>删除配置</button><button className="chat-secondary-button" type="button" onClick={() => void testImageConfig()}><PlugZap size={16} />测试连接（可能收费）</button><button className="chat-primary-button" type="submit" disabled={!imageConfigDraft.name.trim()}>{editingConfigId ? "保存修改" : "保存配置"}</button></div></form></>}
+        </>}
       </aside>
     </main>
   );

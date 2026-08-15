@@ -1,9 +1,10 @@
-import { loadEnvConfig } from "@next/env";
+import nextEnv from "@next/env";
 import { createConnection } from "mysql2/promise";
 
-loadEnvConfig(process.cwd());
+nextEnv.loadEnvConfig(process.cwd());
 
 const { processNextImageGeneration, recoverInterruptedImageGenerations } = await import("../lib/image-generation");
+const { cleanupModelAudit } = await import("../lib/model-controls");
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL 未配置。");
@@ -23,9 +24,15 @@ process.on("SIGTERM", () => { stopping = true; });
 
 console.log("Image worker started.");
 await recoverInterruptedImageGenerations();
+await cleanupModelAudit().catch((error) => console.error("Model audit cleanup failed", { name: error instanceof Error ? error.name : typeof error }));
+let nextAuditCleanupAt = Date.now() + 24 * 60 * 60 * 1000;
 
 try {
   while (!stopping) {
+    if (Date.now() >= nextAuditCleanupAt) {
+      await cleanupModelAudit().catch((error) => console.error("Model audit cleanup failed", { name: error instanceof Error ? error.name : typeof error }));
+      nextAuditCleanupAt = Date.now() + 24 * 60 * 60 * 1000;
+    }
     const processed = await processNextImageGeneration().catch((error) => {
       console.error("Image worker iteration failed", { name: error instanceof Error ? error.name : typeof error });
       return false;

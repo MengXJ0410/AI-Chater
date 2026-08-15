@@ -7,7 +7,7 @@ import type { GeneratedImage } from "@/lib/image-generation-client";
 
 export function GeneratedImageGrid({ images, isGenerating, error, onRetry }: { images: GeneratedImage[]; isGenerating: boolean; error: string; onRetry: () => void }) {
   const [preview, setPreview] = useState<GeneratedImage | null>(null);
-  if (isGenerating) return <div className="image-result-grid" aria-live="polite">{[0, 1].map((item) => <div className="image-result-skeleton" key={item}><LoaderCircle size={22} className="animate-spin" /><span>正在生成图片…</span></div>)}</div>;
+  if (isGenerating) return <div className="image-result-grid" aria-live="polite">{[0, 1].map((item) => <div className="image-result-skeleton" key={item}><LoaderCircle size={22} className="image-loading-spinner" aria-hidden="true" /><span>正在生成图片…</span></div>)}</div>;
   if (error) return <div className="image-result-empty image-result-error"><ImageIcon size={26} /><strong>生成失败</strong><p>{error}</p><button className="chat-secondary-button" type="button" onClick={onRetry}><RefreshCw size={15} />重试</button></div>;
   if (!images.length) return <div className="image-result-empty"><ImageIcon size={28} /><strong>等待生成结果</strong><p>输入描述后，生成的图片会显示在这里。</p></div>;
   return <>

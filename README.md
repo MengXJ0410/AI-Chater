@@ -32,9 +32,20 @@
    npm run db:migrate
    npm run dev
    ```
+   使用生图模式时还需在另一个终端启动任务 worker：
+   ```powershell
+   npm run image:worker
+   ```
+   `一键启动.bat` 会同时启动开发服务器和 worker。
 4. 浏览器打开 `http://localhost:3000`，注册账号后即可使用。
 
 ## 用户模型配置
+
+### 多配置、审计与限流
+
+一个账号可以保存多条对话和生图连接；配置名称可以重复，前端以配置 UUID 区分。新接口为 `GET/POST /api/me/model-configs`、`PUT/DELETE /api/me/model-configs/:id` 和 `POST /api/me/model-configs/:id/test`。读取仅返回名称、Provider、Base URL、模型、运行时预设 ID 和 Key 末四位。旧的单条接口仍保留，始终代理该类型最近更新的一条配置，绝不会删除或覆盖其它记录。
+
+对话运行时 ID 是 `user-chat-config:<uuid>`，生图运行时 ID 是 `user-image-config:<uuid>`；旧 `user-config` 与 `user-image-config` 仍映射到最近更新记录，保证已打开的旧浏览器继续可用。配置写入限制为每账号每小时 30 次，对话测试 10 次、生图测试 3 次、正式生图 20 次。超限返回 `429` 和 `Retry-After`，不会泄露剩余额度。审计事件只记录账号、配置、Provider/Model 快照、请求 ID 和脱敏错误码；worker 按 `MODEL_AUDIT_RETENTION_DAYS`（默认 180 天）清理到期记录。
 
 聊天工作台的“配置”抽屉可为当前账号保存一套模型连接。常用连接方案只需选择并填写 API Key；选择“自定义预设”时可以自行填写 Provider、Base URL 和 Model。保存后配置写入当前账号的 MySQL 记录，下次登录会自动恢复“我的配置”。API Key 仅通过 HTTPS 请求提交，服务端使用 AES-256-GCM 加密保存，读取接口不会返回明文。
 
@@ -70,6 +81,12 @@ ANTHROPIC_API_KEY=your-anthropic-key
 
 支持的 `provider`：`openai`、`openai-compatible`、`xai`、`anthropic`、`google`。图片只能发送给 `supportsImages: true` 的预设。
 
+## 生图模式
+
+生图连接与聊天连接分开保存。当前账号通过 `/api/me/image-config` 保存一套 `xai-compatible` 或 `openai-compatible` 图片连接，API Key 复用同一 AES-256-GCM 密钥环加密。管理员必须把 Base URL 加入 `USER_AI_ALLOWED_BASE_URLS`；Provider 返回图片 URL 时，只允许连接地址同域或 `USER_IMAGE_ALLOWED_OUTPUT_HOSTS` 中明确列出的域名。
+
+连接测试会真实生成并立即删除一张图片，可能产生费用。正式生成由 `POST /api/image-generations` 创建异步任务，`npm run image:worker` 以单并发处理，前端通过 `/api/image-generations/:id` 轮询和取消。任务不自动重试，每次固定生成一张 PNG；生成附件会保存服务端解码后的真实宽高，历史附件可没有尺寸。首期不支持参考图编辑。YYAPI 必须填写其实际支持的图片模型 ID，普通聊天模型 `grok-4.5` 不能直接用于生图。
+
 ## 首页背景
 
 将 JPG、JPEG、PNG、WebP 或 AVIF 图片放入 `public/home-backgrounds`。首页会在下一次访问时按文件名顺序轮播这些图片；目录为空时使用纯色背景。
@@ -82,6 +99,7 @@ npm run build        # 生产构建
 npm run start        # 运行生产构建
 npm run lint         # ESLint
 npm run test         # 单元测试
+npm run image:worker # 异步生图任务 worker
 npm run db:generate  # 从 schema 生成 migration
 npm run db:migrate   # 执行 migration
 ```

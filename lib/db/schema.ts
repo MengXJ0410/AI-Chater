@@ -3,6 +3,7 @@ import {
   datetime,
   index,
   json,
+  int,
   mysqlEnum,
   mysqlTable,
   text,
@@ -30,9 +31,10 @@ export const users = mysqlTable("users", {
 });
 
 export const userAiConfigs = mysqlTable("user_ai_configs", {
-  userId: varchar("user_id", { length: 36 }).primaryKey().references(() => users.id, { onDelete: "cascade" }),
-  presetId: varchar("preset_id", { length: 64 }),
-  name: varchar("name", { length: 80 }),
+  id: varchar("id", { length: 36 }).primaryKey(),
+  userId: varchar("user_id", { length: 36 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  connectionPresetId: varchar("connection_preset_id", { length: 64 }),
+  name: varchar("name", { length: 80 }).notNull(),
   provider: mysqlEnum("provider", ["openai", "openai-compatible", "xai", "anthropic", "google"]).notNull(),
   baseUrl: varchar("base_url", { length: 512 }),
   model: varchar("model", { length: 160 }).notNull(),
@@ -42,10 +44,11 @@ export const userAiConfigs = mysqlTable("user_ai_configs", {
   encryptionKeyId: varchar("encryption_key_id", { length: 64 }).notNull(),
   apiKeyLast4: varchar("api_key_last4", { length: 4 }).notNull(),
   ...timestamps,
-});
+}, (table) => [index("user_ai_configs_user_updated_idx").on(table.userId, table.updatedAt)]);
 
 export const userImageConfigs = mysqlTable("user_image_configs", {
-  userId: varchar("user_id", { length: 36 }).primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  id: varchar("id", { length: 36 }).primaryKey(),
+  userId: varchar("user_id", { length: 36 }).notNull().references(() => users.id, { onDelete: "cascade" }),
   name: varchar("name", { length: 80 }).notNull(),
   provider: mysqlEnum("provider", ["xai-compatible", "openai-compatible"]).notNull(),
   baseUrl: varchar("base_url", { length: 512 }).notNull(),
@@ -56,7 +59,7 @@ export const userImageConfigs = mysqlTable("user_image_configs", {
   encryptionKeyId: varchar("encryption_key_id", { length: 64 }).notNull(),
   apiKeyLast4: varchar("api_key_last4", { length: 4 }).notNull(),
   ...timestamps,
-});
+}, (table) => [index("user_image_configs_user_updated_idx").on(table.userId, table.updatedAt)]);
 
 export const sessions = mysqlTable("sessions", {
   id: varchar("id", { length: 36 }).primaryKey(),
@@ -91,6 +94,7 @@ export const imageGenerations = mysqlTable("image_generations", {
   conversationId: varchar("conversation_id", { length: 36 }).notNull().references(() => conversations.id, { onDelete: "cascade" }),
   userMessageId: varchar("user_message_id", { length: 36 }).notNull().references(() => messages.id, { onDelete: "cascade" }),
   assistantMessageId: varchar("assistant_message_id", { length: 36 }),
+  imageConfigId: varchar("image_config_id", { length: 36 }).references(() => userImageConfigs.id, { onDelete: "set null" }),
   imagePresetId: varchar("image_preset_id", { length: 64 }).notNull(),
   provider: mysqlEnum("provider", ["xai-compatible", "openai-compatible"]).notNull(),
   model: varchar("model", { length: 160 }).notNull(),
@@ -106,9 +110,36 @@ export const imageGenerations = mysqlTable("image_generations", {
   ...timestamps,
 }, (table) => [
   index("image_generations_user_created_idx").on(table.userId, table.createdAt),
+  index("image_generations_config_status_idx").on(table.imageConfigId, table.status),
   index("image_generations_queue_idx").on(table.status, table.createdAt),
   uniqueIndex("image_generations_user_request_unique").on(table.userId, table.requestId),
 ]);
+
+export const modelConfigAuditEvents = mysqlTable("model_config_audit_events", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  userId: varchar("user_id", { length: 36 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  configId: varchar("config_id", { length: 36 }),
+  kind: mysqlEnum("kind", ["chat", "image"]).notNull(),
+  action: mysqlEnum("action", ["created", "updated", "deleted", "tested", "generation_requested", "generation_completed", "generation_failed", "generation_cancelled", "rate_limited"]).notNull(),
+  outcome: mysqlEnum("outcome", ["success", "failed", "rejected"]).notNull(),
+  provider: varchar("provider", { length: 32 }),
+  model: varchar("model", { length: 160 }),
+  runtimePresetId: varchar("runtime_preset_id", { length: 64 }),
+  requestId: varchar("request_id", { length: 64 }),
+  errorCode: varchar("error_code", { length: 64 }),
+  createdAt: datetime("created_at", { mode: "date" }).notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  index("model_config_audit_user_created_idx").on(table.userId, table.createdAt),
+  index("model_config_audit_config_created_idx").on(table.configId, table.createdAt),
+]);
+
+export const rateLimitStates = mysqlTable("rate_limit_states", {
+  userId: varchar("user_id", { length: 36 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  scope: mysqlEnum("scope", ["config_mutation", "chat_test", "image_test", "image_generation"]).notNull(),
+  windowStartedAt: datetime("window_started_at", { mode: "date" }).notNull(),
+  count: int("count", { unsigned: true }).notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow().onUpdateNow(),
+}, (table) => [uniqueIndex("rate_limit_user_scope_unique").on(table.userId, table.scope)]);
 
 export const attachments = mysqlTable("attachments", {
   id: varchar("id", { length: 36 }).primaryKey(),
@@ -117,6 +148,8 @@ export const attachments = mysqlTable("attachments", {
   storageKey: varchar("storage_key", { length: 80 }).notNull().unique(),
   mimeType: varchar("mime_type", { length: 80 }).notNull(),
   size: bigint("size", { mode: "number", unsigned: true }).notNull(),
+  width: int("width", { unsigned: true }),
+  height: int("height", { unsigned: true }),
   originalName: varchar("original_name", { length: 255 }).notNull(),
   generationId: varchar("generation_id", { length: 36 }),
   origin: mysqlEnum("origin", ["upload", "generated"]).notNull().default("upload"),

@@ -50,6 +50,20 @@
       "when": 1786802307552,
       "tag": "0006_clumsy_blizzard",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1786805973599,
+      "tag": "0007_silent_quasar",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1786815769826,
+      "tag": "0008_multi_model_configs",
+      "breakpoints": true
     }
   ]
 }

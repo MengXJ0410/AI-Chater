@@ -37,7 +37,9 @@ export async function DELETE(request: Request) {
       await tx.delete(userAiConfigs).where(eq(userAiConfigs.userId, user.id));
       await tx.delete(userImageConfigs).where(eq(userImageConfigs.userId, user.id));
       await tx.update(imageGenerations).set({ status: "cancelled", completedAt: new Date() })
-        .where(and(eq(imageGenerations.userId, user.id), inArray(imageGenerations.status, ["queued", "running", "cancel_requested"])));
+        .where(and(eq(imageGenerations.userId, user.id), eq(imageGenerations.status, "queued")));
+      await tx.update(imageGenerations).set({ status: "cancel_requested" })
+        .where(and(eq(imageGenerations.userId, user.id), inArray(imageGenerations.status, ["running", "cancel_requested"])));
     });
     await removeAvatar(account[0].avatarStorageKey).catch((error) => {
       console.error("Failed to remove deleted account avatar", { name: error instanceof Error ? error.name : typeof error });

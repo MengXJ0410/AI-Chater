@@ -1,6 +1,7 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { randomUUID } from "crypto";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { imageGenerations, userImageConfigs } from "@/lib/db/schema";
+import { imageGenerations, userImageConfigs, users } from "@/lib/db/schema";
 import { RequestError } from "@/lib/http";
 import { decryptApiKey, encryptApiKey, getActiveEncryptionKeyId, normalizeBaseUrl } from "@/lib/user-ai-config";
 import type { z } from "zod";
@@ -56,7 +57,7 @@ export function resolveStoredImageConnection(row: typeof userImageConfigs.$infer
   return { ...connection, apiKey: decryptApiKey(row) } satisfies ImageConnection;
 }
 
-function rotatedCredentials(row: typeof userImageConfigs.$inferSelect) {
+export function rotatedImageCredentials(row: typeof userImageConfigs.$inferSelect) {
   return row.encryptionKeyId === getActiveEncryptionKeyId()
     ? null
     : encryptApiKey(decryptApiKey(row));
@@ -64,14 +65,9 @@ function rotatedCredentials(row: typeof userImageConfigs.$inferSelect) {
 
 async function lockActiveUser(tx: Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0], userId: string) {
   await tx.execute(sql`SELECT id FROM users WHERE id = ${userId} AND deleted_at IS NULL FOR UPDATE`);
-}
-
-async function cancelOutstandingGenerations(tx: Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0], userId: string) {
-  const now = new Date();
-  await tx.update(imageGenerations).set({ status: "cancelled", completedAt: now })
-    .where(and(eq(imageGenerations.userId, userId), eq(imageGenerations.status, "queued")));
-  await tx.update(imageGenerations).set({ status: "cancel_requested" })
-    .where(and(eq(imageGenerations.userId, userId), eq(imageGenerations.status, "running")));
+  const active = await tx.select({ id: users.id }).from(users)
+    .where(and(eq(users.id, userId), isNull(users.deletedAt))).limit(1);
+  if (!active[0]) throw new RequestError("账号不可用。", 401);
 }
 
 export function imageCapabilities(provider: ImageProvider) {
@@ -86,7 +82,7 @@ export function imageCapabilities(provider: ImageProvider) {
 }
 
 export async function getPublicImageConfig(userId: string) {
-  const rows = await getDb().select().from(userImageConfigs).where(eq(userImageConfigs.userId, userId)).limit(1);
+  const rows = await getDb().select().from(userImageConfigs).where(eq(userImageConfigs.userId, userId)).orderBy(desc(userImageConfigs.updatedAt)).limit(1);
   return rows[0] ? toPublic(rows[0]) : null;
 }
 
@@ -94,10 +90,10 @@ export async function saveImageConfig(userId: string, input: ImageConfigInput) {
   const connection = validateImageConnection(input);
   return getDb().transaction(async (tx) => {
     await lockActiveUser(tx, userId);
-    const existing = await tx.select().from(userImageConfigs).where(eq(userImageConfigs.userId, userId)).limit(1);
+    const existing = await tx.select().from(userImageConfigs).where(eq(userImageConfigs.userId, userId)).orderBy(desc(userImageConfigs.updatedAt)).limit(1);
     if (!input.apiKey && !existing[0]) throw new RequestError("首次保存必须填写 API Key。");
 
-    const encrypted = input.apiKey ? encryptApiKey(input.apiKey) : rotatedCredentials(existing[0]!) ?? existing[0]!;
+    const encrypted = input.apiKey ? encryptApiKey(input.apiKey) : rotatedImageCredentials(existing[0]!) ?? existing[0]!;
     const values = {
       name: input.name,
       ...connection,
@@ -107,9 +103,13 @@ export async function saveImageConfig(userId: string, input: ImageConfigInput) {
       encryptionKeyId: encrypted.encryptionKeyId,
       apiKeyLast4: input.apiKey ? input.apiKey.slice(-4) : existing[0]!.apiKeyLast4,
     };
-    await cancelOutstandingGenerations(tx, userId);
-    if (existing[0]) await tx.update(userImageConfigs).set(values).where(eq(userImageConfigs.userId, userId));
-    else await tx.insert(userImageConfigs).values({ userId, ...values });
+    if (existing[0]) {
+      const now = new Date();
+      await tx.update(imageGenerations).set({ status: "cancelled", completedAt: now }).where(and(eq(imageGenerations.imageConfigId, existing[0].id), eq(imageGenerations.status, "queued")));
+      await tx.update(imageGenerations).set({ status: "cancel_requested" }).where(and(eq(imageGenerations.imageConfigId, existing[0].id), eq(imageGenerations.status, "running")));
+      await tx.update(userImageConfigs).set(values).where(eq(userImageConfigs.id, existing[0].id));
+    }
+    else await tx.insert(userImageConfigs).values({ id: randomUUID(), userId, ...values });
     return {
       name: values.name,
       provider: values.provider,
@@ -124,13 +124,17 @@ export async function saveImageConfig(userId: string, input: ImageConfigInput) {
 export async function deleteImageConfig(userId: string) {
   await getDb().transaction(async (tx) => {
     await lockActiveUser(tx, userId);
-    await cancelOutstandingGenerations(tx, userId);
-    await tx.delete(userImageConfigs).where(eq(userImageConfigs.userId, userId));
+    const existing = await tx.select({ id: userImageConfigs.id }).from(userImageConfigs).where(eq(userImageConfigs.userId, userId)).orderBy(desc(userImageConfigs.updatedAt)).limit(1);
+    if (!existing[0]) return;
+    const now = new Date();
+    await tx.update(imageGenerations).set({ status: "cancelled", completedAt: now }).where(and(eq(imageGenerations.imageConfigId, existing[0].id), eq(imageGenerations.status, "queued")));
+    await tx.update(imageGenerations).set({ status: "cancel_requested" }).where(and(eq(imageGenerations.imageConfigId, existing[0].id), eq(imageGenerations.status, "running")));
+    await tx.delete(userImageConfigs).where(eq(userImageConfigs.id, existing[0].id));
   });
 }
 
 export async function resolveImageConnection(userId: string, input?: ImageConfigInput): Promise<ImageConnection> {
-  const existing = await getDb().select().from(userImageConfigs).where(eq(userImageConfigs.userId, userId)).limit(1);
+  const existing = await getDb().select().from(userImageConfigs).where(eq(userImageConfigs.userId, userId)).orderBy(desc(userImageConfigs.updatedAt)).limit(1);
   if (input) {
     const connection = validateImageConnection(input);
     if (!input.apiKey && !existing[0]) throw new RequestError("首次测试必须填写 API Key。");
@@ -138,7 +142,7 @@ export async function resolveImageConnection(userId: string, input?: ImageConfig
   }
   if (!existing[0]) throw new RequestError("请先配置图片模型。", 404);
   const connection = resolveStoredImageConnection(existing[0]);
-  const rotated = rotatedCredentials(existing[0]);
-  if (rotated) await getDb().update(userImageConfigs).set(rotated).where(eq(userImageConfigs.userId, userId));
+  const rotated = rotatedImageCredentials(existing[0]);
+  if (rotated) await getDb().update(userImageConfigs).set(rotated).where(eq(userImageConfigs.id, existing[0].id));
   return connection;
 }

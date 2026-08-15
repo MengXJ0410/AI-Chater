@@ -8,7 +8,7 @@ import { getDb } from "@/lib/db";
 import { attachments, conversations, messages } from "@/lib/db/schema";
 import { assertSameOrigin, errorResponse } from "@/lib/http";
 import { chatSchema } from "@/lib/validators";
-import { getUserAiModelConfig, USER_AI_PRESET_ID } from "@/lib/user-ai-config";
+import { chatConnectionForPreset, LEGACY_CHAT_RUNTIME_ID } from "@/lib/model-configs";
 
 export const runtime = "nodejs";
 
@@ -22,10 +22,10 @@ export async function POST(request: Request) {
     if (!conversation[0]) return errorResponse("会话不存在。", 404);
 
     const systemPreset = getPreset(presetId);
-    const userConfig = presetId === USER_AI_PRESET_ID ? await getUserAiModelConfig(user.id) : null;
+    const userConfig = presetId === LEGACY_CHAT_RUNTIME_ID || presetId.startsWith("user-chat-config:") ? await chatConnectionForPreset(user.id, presetId) : null;
     if (!systemPreset && !userConfig) return errorResponse("所选模型预设不存在。", 404);
     if (attachmentIds.length && (!systemPreset || !systemPreset.supportsImages)) return errorResponse("当前模型不支持图片输入。");
-    const connection = userConfig ?? connectionFromPreset(systemPreset!);
+    const connection = userConfig?.connection ?? connectionFromPreset(systemPreset!);
 
     const uniqueAttachmentIds = [...new Set(attachmentIds)];
     const selectedAttachments = uniqueAttachmentIds.length

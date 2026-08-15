@@ -69,10 +69,39 @@ export const imageConfigSchema = z.object({
   apiKey: z.string().trim().min(1, "请输入 API Key。").max(4096, "API Key 不能超过 4096 个字符。").optional(),
 }).strict();
 
+const modelConfigBaseSchema = z.object({
+  kind: z.enum(["chat", "image"]),
+  name: z.string().trim().min(1, "请输入配置名称。").max(80, "配置名称不能超过 80 个字符。"),
+  connectionPresetId: z.string().trim().min(1).max(64).optional(),
+  provider: z.union([aiProviderSchema, imageProviderSchema]).optional(),
+  baseUrl: z.string().trim().max(512, "Base URL 不能超过 512 个字符。").optional(),
+  model: z.string().trim().max(160, "模型名称不能超过 160 个字符。").optional(),
+  apiKey: z.string().trim().min(1, "请输入 API Key。").max(4096, "API Key 不能超过 4096 个字符。").optional(),
+}).strict();
+
+export const modelConfigCreateSchema = modelConfigBaseSchema.superRefine((value, context) => {
+  if (!value.apiKey) context.addIssue({ code: "custom", path: ["apiKey"], message: "首次创建必须填写 API Key。" });
+  if (value.kind === "image") {
+    if (!value.provider || !imageProviderSchema.safeParse(value.provider).success) context.addIssue({ code: "custom", path: ["provider"], message: "请选择图片 Provider。" });
+    if (!value.baseUrl) context.addIssue({ code: "custom", path: ["baseUrl"], message: "请输入 Base URL。" });
+    if (!value.model) context.addIssue({ code: "custom", path: ["model"], message: "请输入图片模型名称。" });
+  } else if (value.connectionPresetId === "custom" && (!value.provider || !value.baseUrl || !value.model)) {
+    context.addIssue({ code: "custom", message: "自定义对话配置需要 Provider、Base URL 和 Model。" });
+  }
+});
+
+export const modelConfigUpdateSchema = modelConfigBaseSchema.superRefine((value, context) => {
+  if (value.kind === "image") {
+    if (!value.provider || !imageProviderSchema.safeParse(value.provider).success || !value.baseUrl || !value.model) context.addIssue({ code: "custom", message: "图片配置需要 Provider、Base URL 和 Model。" });
+  } else if (value.connectionPresetId === "custom" && (!value.provider || !value.baseUrl || !value.model)) {
+    context.addIssue({ code: "custom", message: "自定义对话配置需要 Provider、Base URL 和 Model。" });
+  }
+});
+
 export const imageGenerationSchema = z.object({
   requestId: z.string().uuid(),
   conversationId: z.string().uuid(),
-  imagePresetId: z.literal("user-image-config"),
+  imagePresetId: z.string().min(1).max(64),
   prompt: z.string().trim().min(1, "请输入生图提示词。").max(4000, "提示词不能超过 4000 个字符。"),
   referenceAttachmentIds: z.array(z.string().uuid()).max(4).default([]),
   aspectRatio: imageAspectRatioSchema.default("1:1"),
