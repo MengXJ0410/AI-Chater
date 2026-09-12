@@ -8,16 +8,29 @@ import { modelConfigCreateSchema } from "@/shared/validators";
 
 export const runtime = "nodejs";
 
-export async function GET() { try { const user = await requireUser(); return NextResponse.json({ configs: await listModelConfigs(user.id) }); } catch (error) { return routeError(error); } }
+export async function GET() {
+  try {
+    const user = await requireUser();
+    return NextResponse.json({ configs: await listModelConfigs(user.id) });
+  } catch (error) {
+    return routeError(error);
+  }
+}
 
 export async function POST(request: Request) {
-  let userId = ""; let input: ReturnType<typeof modelConfigCreateSchema.parse> | undefined;
+  let userId = "";
+  let input: ReturnType<typeof modelConfigCreateSchema.parse> | undefined;
   try {
-    assertSameOrigin(request); const user = await requireUser(); userId = user.id; input = modelConfigCreateSchema.parse(await request.json());
+    assertSameOrigin(request);
+    const user = await requireUser();
+    userId = user.id;
+    input = modelConfigCreateSchema.parse(await request.json());
     await consumeRateLimit(user.id, "config_mutation");
     return NextResponse.json({ config: await createModelConfig(user.id, input) }, { status: 201 });
   } catch (error) {
-    if (userId && error instanceof Error && "status" in error && Number(error.status) === 429) await auditModelConfig({ userId, kind: input?.kind ?? "chat", action: "rate_limited", outcome: "rejected", errorCode: "RATE_LIMITED" }).catch(() => undefined);
+    if (userId && error instanceof Error && "status" in error && Number(error.status) === 429) {
+      await auditModelConfig({ userId, kind: input?.kind ?? "chat", action: "rate_limited", outcome: "rejected", errorCode: "RATE_LIMITED" }).catch(() => undefined);
+    }
     return routeError(error);
   }
 }

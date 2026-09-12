@@ -6,8 +6,83 @@ import { saveGeneratedVideo } from "@/server/services/uploads";
 import type { VideoConnection } from "@/server/services/video-config";
 import type { VideoMode } from "@/client/video/generation-client";
 
-const headers = (config: VideoConnection) => ({ "Content-Type": "application/json", ...(config.comfyToken ? { Authorization: `Bearer ${config.comfyToken}` } : {}) });
-export async function testComfy(config: Pick<VideoConnection, "comfyBaseUrl" | "comfyToken">) { const response = await fetch(`${config.comfyBaseUrl}/system_stats`, { headers: headers(config as VideoConnection), signal: AbortSignal.timeout(10000) }); if (!response.ok) throw new RequestError("ComfyUI 服务不可用。", 502); return response.json(); }
-function replace(value: unknown, input: Record<string, unknown>): unknown { if (Array.isArray(value)) return value.map((v) => replace(v, input)); if (!value || typeof value !== "object") return value; const row = value as Record<string, unknown>; const out: Record<string, unknown> = {}; for (const [k, v] of Object.entries(row)) { if (k === "text" && typeof v === "string" && v.includes("__POSITIVE_PROMPT__")) out[k] = v.replaceAll("__POSITIVE_PROMPT__", String(input.positivePrompt)); else if (k === "text" && typeof v === "string" && v.includes("__NEGATIVE_PROMPT__")) out[k] = v.replaceAll("__NEGATIVE_PROMPT__", String(input.negativePrompt ?? "")); else if (k === "value" && ["width", "height", "length", "frames", "fps", "steps"].includes(String(row.__field))) out[k] = input[row.__field as string] ?? v; else out[k] = replace(v, input); } return out; }
-export async function submitComfy(config: VideoConnection, mode: VideoMode, input: { positivePrompt: string; negativePrompt?: string; width: number; height: number; frames: number; fps: number; steps: number; workflowDir?: string }) { const file = path.resolve(process.cwd(), input.workflowDir ?? config.workflowDir, `wan-${mode === "text-to-video" ? "t2v" : mode === "image-to-video" ? "i2v" : "ti2v"}.workflow.json`); let workflow: unknown; try { workflow = JSON.parse(await readFile(file, "utf8")); } catch { throw new RequestError(`找不到 workflow 模板：${file}`, 500); } const prompt = replace(workflow, input) as Record<string, unknown>; const response = await fetch(`${config.comfyBaseUrl}/prompt`, { method: "POST", headers: headers(config), body: JSON.stringify({ prompt, client_id: "ai-chater-video-worker" }), signal: AbortSignal.timeout(30000) }); if (!response.ok) throw new RequestError("ComfyUI 提交任务失败。", 502); const data = await response.json() as { prompt_id?: string }; if (!data.prompt_id) throw new RequestError("ComfyUI 未返回 prompt_id。", 502); return data.prompt_id; }
-export async function waitComfy(config: VideoConnection, promptId: string, signal: AbortSignal) { const deadline = Date.now() + Number(process.env.COMFYUI_OUTPUT_TIMEOUT_MS ?? 900000); while (Date.now() < deadline) { const response = await fetch(`${config.comfyBaseUrl}/history/${promptId}`, { headers: headers(config), signal }); if (response.ok) { const data = await response.json() as Record<string, any>; const item = data[promptId]; if (item?.status?.completed || item?.outputs) { const output = Object.values(item.outputs ?? {}).flatMap((node: any) => Object.values(node ?? {})).flatMap((v: any) => Array.isArray(v) ? v : []).find((v: any) => v?.filename); if (!output) throw new RequestError("ComfyUI 未返回视频输出。", 502); const blob = await fetch(`${config.comfyBaseUrl}/view?filename=${encodeURIComponent(output.filename)}&subfolder=${encodeURIComponent(output.subfolder ?? "")}&type=${encodeURIComponent(output.type ?? "output")}`, { headers: headers(config), signal }); if (!blob.ok) throw new RequestError("下载 ComfyUI 视频失败。", 502); return saveGeneratedVideo(new Uint8Array(await blob.arrayBuffer()), output.filename.endsWith(".webm") ? "video/webm" : "video/mp4"); } } await new Promise((r) => setTimeout(r, 1000)); } throw new RequestError("ComfyUI 任务超时。", 504); }
+const headers = (config: VideoConnection) => ({
+  "Content-Type": "application/json",
+  ...(config.comfyToken ? { Authorization: `Bearer ${config.comfyToken}` } : {}),
+});
+
+export async function testComfy(config: Pick<VideoConnection, "comfyBaseUrl" | "comfyToken">) {
+  const response = await fetch(`${config.comfyBaseUrl}/system_stats`, {
+    headers: headers(config as VideoConnection),
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!response.ok) throw new RequestError("ComfyUI 服务不可用。", 502);
+  return response.json();
+}
+
+function replace(value: unknown, input: Record<string, unknown>): unknown {
+  if (Array.isArray(value)) return value.map((v) => replace(v, input));
+  if (!value || typeof value !== "object") return value;
+  const row = value as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(row)) {
+    if (k === "text" && typeof v === "string" && v.includes("__POSITIVE_PROMPT__")) {
+      out[k] = v.replaceAll("__POSITIVE_PROMPT__", String(input.positivePrompt));
+    } else if (k === "text" && typeof v === "string" && v.includes("__NEGATIVE_PROMPT__")) {
+      out[k] = v.replaceAll("__NEGATIVE_PROMPT__", String(input.negativePrompt ?? ""));
+    } else if (k === "value" && ["width", "height", "length", "frames", "fps", "steps"].includes(String(row.__field))) {
+      out[k] = input[row.__field as string] ?? v;
+    } else {
+      out[k] = replace(v, input);
+    }
+  }
+  return out;
+}
+
+export async function submitComfy(
+  config: VideoConnection,
+  mode: VideoMode,
+  input: { positivePrompt: string; negativePrompt?: string; width: number; height: number; frames: number; fps: number; steps: number; workflowDir?: string },
+) {
+  const file = path.resolve(process.cwd(), input.workflowDir ?? config.workflowDir, `wan-${mode === "text-to-video" ? "t2v" : mode === "image-to-video" ? "i2v" : "ti2v"}.workflow.json`);
+  let workflow: unknown;
+  try {
+    workflow = JSON.parse(await readFile(file, "utf8"));
+  } catch {
+    throw new RequestError(`找不到 workflow 模板：${file}`, 500);
+  }
+  const prompt = replace(workflow, input) as Record<string, unknown>;
+  const response = await fetch(`${config.comfyBaseUrl}/prompt`, {
+    method: "POST",
+    headers: headers(config),
+    body: JSON.stringify({ prompt, client_id: "ai-chater-video-worker" }),
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!response.ok) throw new RequestError("ComfyUI 提交任务失败。", 502);
+  const data = await response.json() as { prompt_id?: string };
+  if (!data.prompt_id) throw new RequestError("ComfyUI 未返回 prompt_id。", 502);
+  return data.prompt_id;
+}
+
+export async function waitComfy(config: VideoConnection, promptId: string, signal: AbortSignal) {
+  const deadline = Date.now() + Number(process.env.COMFYUI_OUTPUT_TIMEOUT_MS ?? 900000);
+  while (Date.now() < deadline) {
+    const response = await fetch(`${config.comfyBaseUrl}/history/${promptId}`, { headers: headers(config), signal });
+    if (response.ok) {
+      const data = await response.json() as Record<string, any>;
+      const item = data[promptId];
+      if (item?.status?.completed || item?.outputs) {
+        const output = Object.values(item.outputs ?? {})
+          .flatMap((node: any) => Object.values(node ?? {}))
+          .flatMap((v: any) => Array.isArray(v) ? v : [])
+          .find((v: any) => v?.filename);
+        if (!output) throw new RequestError("ComfyUI 未返回视频输出。", 502);
+        const blob = await fetch(`${config.comfyBaseUrl}/view?filename=${encodeURIComponent(output.filename)}&subfolder=${encodeURIComponent(output.subfolder ?? "")}&type=${encodeURIComponent(output.type ?? "output")}`, { headers: headers(config), signal });
+        if (!blob.ok) throw new RequestError("下载 ComfyUI 视频失败。", 502);
+        return saveGeneratedVideo(new Uint8Array(await blob.arrayBuffer()), output.filename.endsWith(".webm") ? "video/webm" : "video/mp4");
+      }
+    }
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  throw new RequestError("ComfyUI 任务超时。", 504);
+}
