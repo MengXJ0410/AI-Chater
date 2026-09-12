@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "@/server/db";
 import { imageGenerations, userAiConfigs, userImageConfigs } from "@/server/db/schema";
-import { auditModelConfig } from "@/server/services/model-controls";
+import { auditModelConfig } from "@/server/services/model-audit";
 import { RequestError } from "@/server/http/errors";
 import { getActiveEncryptionKeyId, decryptApiKey, encryptApiKey } from "@/server/security/api-key-crypto";
 import { resolveUserAiInput, validateUserAiConfig, type UserAiConfigInput, type UserAiModelConfig } from "@/server/services/user-ai-config";

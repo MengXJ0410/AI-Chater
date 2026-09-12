@@ -6,7 +6,7 @@ import { getDb } from "@/server/db";
 import { conversations, messages } from "@/server/db/schema";
 import { textFromParts } from "@/shared/messages";
 import { chatConnectionForPreset } from "@/server/services/model-configs";
-import { auditModelConfig } from "@/server/services/model-controls";
+import { auditModelConfig } from "@/server/services/model-audit";
 import { RequestError } from "@/server/http/errors";
 
 export const COMPANION_PERSONA_VERSION = "catgirl-v1";

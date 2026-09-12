@@ -1,12 +1,9 @@
-import { randomUUID } from "crypto";
-import { and, eq, lt, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "@/server/db";
-import { modelConfigAuditEvents, rateLimitStates } from "@/server/db/schema";
+import { rateLimitStates } from "@/server/db/schema";
 import { RequestError } from "@/server/http/errors";
 
 export type RateLimitScope = "config_mutation" | "chat_test" | "image_test" | "image_generation";
-export type AuditKind = "chat" | "image";
-export type AuditAction = typeof modelConfigAuditEvents.$inferInsert.action;
 
 const scopeEnv: Record<RateLimitScope, string> = {
   config_mutation: "MODEL_CONFIG_MUTATION_LIMIT_PER_HOUR",
@@ -39,15 +36,4 @@ export async function consumeRateLimitInTransaction(tx: DatabaseTransaction, use
 
 export async function consumeRateLimit(userId: string, scope: RateLimitScope, now = new Date()) {
   return getDb().transaction((tx) => consumeRateLimitInTransaction(tx, userId, scope, now));
-}
-
-export async function auditModelConfig(event: Omit<typeof modelConfigAuditEvents.$inferInsert, "id">) {
-  await getDb().insert(modelConfigAuditEvents).values({ id: randomUUID(), ...event });
-}
-
-export async function cleanupModelAudit(now = new Date()) {
-  const days = Number(process.env.MODEL_AUDIT_RETENTION_DAYS ?? 180);
-  const safeDays = Number.isSafeInteger(days) && days > 0 ? days : 180;
-  const cutoff = new Date(now.getTime() - safeDays * 24 * 60 * 60 * 1000);
-  await getDb().delete(modelConfigAuditEvents).where(lt(modelConfigAuditEvents.createdAt, cutoff));
 }

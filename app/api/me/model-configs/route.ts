@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { routeError } from "@/server/http/route-error";
 import { requireUser } from "@/server/security/auth";
 import { assertSameOrigin } from "@/server/http/errors";
-import { auditModelConfig, consumeRateLimit } from "@/server/services/model-controls";
+import { auditModelConfig } from "@/server/services/model-audit";
+import { consumeRateLimit } from "@/server/security/rate-limit";
 import { createModelConfig, listModelConfigs } from "@/server/services/model-configs";
 import { modelConfigCreateSchema } from "@/shared/validators";
 

@@ -35,10 +35,10 @@ server/         后端应用层：HTTP 基础设施、安全、上游适配、�
 | `client/` | 纯浏览器工具：外观、聊天视觉、首页数据、头像裁切、媒体生成客户端辅助等。 |
 | `shared/` | `messages.ts`（消息 parts）、`validators.ts`（Zod）、`config.ts`（Provider/连接方案）、`video.ts`（视频模式）。 |
 | `server/http/` | `RequestError`、`errorResponse`、`assertSameOrigin`、`routeError`、Companion CORS。 |
-| `server/security/` | 会话认证、账号辅助、API Key 加密密钥环（`api-key-crypto`）、URL/SSRF 安全校验（`url-safety`）、Companion 票据与运行时令牌。 |
+| `server/security/` | 会话认证、账号辅助、API Key 加密密钥环（`api-key-crypto`）、URL/SSRF 安全校验（`url-safety`）、固定窗口限流（`rate-limit`）、Companion 票据与运行时令牌。 |
 | `server/db/` | Drizzle schema 与连接池。 |
 | `server/providers/` | 上游适配：`ai`、`ai-image`、`comfyui`、`minimax-h3`。 |
-| `server/services/` | 业务用例：会话、聊天、账号、模型配置、生图、视频、伴侣、上传、头像、首页背景、审计与限流。 |
+| `server/services/` | 业务用例：会话、聊天、账号、模型配置、模型审计（`model-audit`）、生图、视频、伴侣、上传、头像、首页背景。 |
 | `server/agent/` | 无路由、无数据库依赖的工具调用内核（v1 只读工具）。 |
 | `server/config.ts` | 读取环境变量：预设、上传目录、上传上限、会话时长。 |
 | `scripts/` | `image-worker.ts`、`video-worker.ts` 异步任务 worker 与部署脚本。 |

@@ -4,7 +4,8 @@ import { logImageError, generateConfiguredImage } from "@/server/providers/ai-im
 import { logModelError, testModelConnection } from "@/server/providers/ai";
 import { requireUser } from "@/server/security/auth";
 import { assertSameOrigin, errorResponse, RequestError } from "@/server/http/errors";
-import { consumeRateLimit, auditModelConfig } from "@/server/services/model-controls";
+import { auditModelConfig } from "@/server/services/model-audit";
+import { consumeRateLimit } from "@/server/security/rate-limit";
 import { chatConnectionForPreset, imageConnectionForPreset } from "@/server/services/model-configs";
 import { removeImages, saveGeneratedPng } from "@/server/services/uploads";
 

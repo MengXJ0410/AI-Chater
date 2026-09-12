@@ -4,7 +4,7 @@ import { requireUser } from "@/server/security/auth";
 import { enqueueImageGeneration } from "@/server/services/image-generation";
 import { assertSameOrigin } from "@/server/http/errors";
 import { imageGenerationSchema } from "@/shared/validators";
-import { auditModelConfig } from "@/server/services/model-controls";
+import { auditModelConfig } from "@/server/services/model-audit";
 
 export const runtime = "nodejs";
 
