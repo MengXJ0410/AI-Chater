@@ -30,6 +30,7 @@ import {
 } from "@/client/home/home-sections";
 import { HOME_STAR_POINTS } from "@/client/home/home-sky";
 import { CHAT_ENTRY_REQUEST_EVENT, CHAT_ENTRY_STORAGE_KEY, createChatEntryToken, isPlainPrimaryClick } from "@/client/chat-entry-transition";
+import { logout as logoutRequest } from "@/client/api/auth";
 
 type HomeUser = { id: string; username: string } | null;
 
@@ -219,7 +220,7 @@ export function HomeHero({ backgrounds, user }: { backgrounds: string[]; user: H
   }
 
   async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
+    await logoutRequest();
     router.refresh();
   }
 

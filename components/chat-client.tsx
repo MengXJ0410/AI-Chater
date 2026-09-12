@@ -13,22 +13,36 @@ import { VideoWorkspace } from "@/components/video-workspace";
 import { SavedConfigList } from "@/components/saved-config-list";
 import { CHAT_BACKGROUND_CHANGE_EVENT, CHAT_BACKGROUND_STORAGE_KEY } from "@/client/appearance";
 import { CHAT_ENTRY_READY_EVENT, CHAT_ENTRY_STORAGE_KEY, isPendingChatEntry } from "@/client/chat-entry-transition";
-import { appendStreamText, getGenerationLabel, type GenerationStatus } from "@/client/chat-message";
+import { appendStreamText, getGenerationLabel } from "@/client/chat-message";
 import { getFollowScrollTop, isNearScrollBottom } from "@/client/chat-ambient";
 import { createLegacyWorkspaceConfigs, isWorkspaceConfigFallbackStatus, normalizeSavedWorkspaceConfigs, type SavedWorkspaceConfig, type WorkspaceConfigFilter, type WorkspaceConfigMode } from "@/client/workspace-configs";
-import type { MessagePart } from "@/shared/messages";
+import { getChatPresets, type AiPreset } from "@/client/api/presets";
+import { logout as logoutRequest } from "@/client/api/auth";
+import { createConversation as createConversationRequest, deleteConversation as deleteConversationRequest, getConversation, listConversations, renameConversation as renameConversationRequest, type ChatMessage, type Conversation } from "@/client/api/conversations";
+import { removeUpload, uploadImage } from "@/client/api/uploads";
+import { streamChat } from "@/client/api/chat";
+import {
+  createModelConfig,
+  deleteLegacyChatConfig,
+  deleteLegacyImageConfig,
+  deleteModelConfig,
+  getLegacyChatConfig,
+  getLegacyImageConfig,
+  listSavedModelConfigs,
+  saveLegacyChatConfig,
+  saveLegacyImageConfig,
+  testLegacyChatConfig,
+  testLegacyImageConfig,
+  updateModelConfig,
+  type ConnectionPreset,
+  type SavedAiConfig,
+} from "@/client/api/model-configs";
 
 type User = { id: string; username: string; avatarUrl?: string | null };
-type Conversation = { id: string; title: string; createdAt: string; updatedAt: string };
-type ChatMessage = { id: string; role: "user" | "assistant"; parts: MessagePart[]; presetId: string | null; model: string | null; createdAt: string; status?: GenerationStatus };
-type AiPreset = { id: string; label: string; model: string; supportsImages: boolean };
-type ConnectionPreset = { id: string; label: string; provider: string; baseUrl: string; model: string; readOnly?: boolean };
 type CustomDraft = { provider: "openai" | "openai-compatible" | "xai" | "anthropic" | "google"; baseUrl: string; model: string };
 type PendingAttachment = { id: string; originalName: string };
 type ToolId = "chat" | "image" | "video" | "agent";
-type SavedAiConfig = ConnectionPreset & { presetId: string; name?: string; apiKeyConfigured: true; apiKeyLast4: string };
 type ImageConfigDraft = { name: string; provider: "xai-compatible" | "openai-compatible"; baseUrl: string; model: string };
-type SavedImageConfig = ImageConfigDraft & { apiKeyConfigured: true; apiKeyLast4: string };
 
 const SIDEBAR_STORAGE_KEY = "ai-chater-chat-sidebar-v1";
 const IMAGE_PRESET_STORAGE_KEY = "ai-chater-image-preset";
@@ -38,13 +52,6 @@ const TOOL_ITEMS: Array<{ id: ToolId; label: string; description: string; icon: 
   { id: "video", label: "视频", description: "生成和编辑视频", icon: Video },
   { id: "agent", label: "Agent", description: "组合工具完成任务", icon: WandSparkles },
 ];
-
-async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, init);
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error ?? "请求失败，请重试。");
-  return payload as T;
-}
 
 export function ChatClient({ user }: { user: User }) {
   const router = useRouter();
@@ -100,7 +107,7 @@ export function ChatClient({ user }: { user: User }) {
   useEffect(() => {
     if (!isConfigDrawerOpen || configView !== "editor" || configTab !== "image" || editingConfigId) return;
     let cancelled = false;
-    void requestJson<{ config?: SavedImageConfig | null }>("/api/me/image-config")
+    void getLegacyImageConfig()
       .then((data) => { if (!cancelled && data.config) setImageConfigDraft({ name: data.config.name, provider: data.config.provider, baseUrl: data.config.baseUrl, model: data.config.model }); })
       .catch((cause) => { if (!cancelled) setConfigNotice(cause instanceof Error ? cause.message : "生图配置服务尚未接入。"); });
     return () => { cancelled = true; };
@@ -136,18 +143,14 @@ export function ChatClient({ user }: { user: User }) {
     setIsSavedConfigsLoading(true);
     setSavedConfigsError("");
     try {
-      const response = await fetch("/api/me/model-configs");
-      const payload = await response.json().catch(() => ({}));
-      if (response.ok) {
-        setSavedConfigs(normalizeSavedWorkspaceConfigs(payload.configs));
+      const { ok, status, configs } = await listSavedModelConfigs();
+      if (ok) {
+        setSavedConfigs(normalizeSavedWorkspaceConfigs(configs));
         setSavedConfigMode("multi");
         return;
       }
-      if (!isWorkspaceConfigFallbackStatus(response.status)) throw new Error(payload.error ?? "读取我的配置失败。");
-      const [chatData, imageData] = await Promise.all([
-        requestJson<{ config: SavedAiConfig | null }>("/api/me/ai-config"),
-        requestJson<{ config: SavedImageConfig | null }>("/api/me/image-config"),
-      ]);
+      if (!isWorkspaceConfigFallbackStatus(status)) throw new Error("读取我的配置失败。");
+      const [chatData, imageData] = await Promise.all([getLegacyChatConfig(), getLegacyImageConfig()]);
       setSavedConfigs(createLegacyWorkspaceConfigs(chatData.config, imageData.config));
       setSavedConfigMode("legacy");
     } catch (cause) {
@@ -158,12 +161,11 @@ export function ChatClient({ user }: { user: User }) {
   }, []);
 
   const loadConversations = useCallback(async () => {
-    const data = await requestJson<{ conversations: Conversation[] }>("/api/conversations");
-    setConversations(data.conversations);
+    setConversations(await listConversations());
   }, []);
 
   const loadConversation = useCallback(async (id: string) => {
-    const data = await requestJson<{ conversation: Conversation; messages: ChatMessage[] }>(`/api/conversations/${id}`);
+    const data = await getConversation(id);
     setMessages(data.messages);
   }, []);
 
@@ -189,14 +191,14 @@ export function ChatClient({ user }: { user: User }) {
     let cancelled = false;
     async function initialize() {
       try {
-        const [conversationData, presetData, configData] = await Promise.all([
-          requestJson<{ conversations: Conversation[] }>("/api/conversations"),
-          requestJson<{ presets: AiPreset[] }>("/api/ai/presets"),
-          requestJson<{ config: SavedAiConfig | null; presets: ConnectionPreset[] }>("/api/me/ai-config"),
+        const [conversationList, presetList, configData] = await Promise.all([
+          listConversations(),
+          getChatPresets(),
+          getLegacyChatConfig(),
         ]);
         if (cancelled) return;
-        setConversations(conversationData.conversations);
-        setPresets(presetData.presets);
+        setConversations(conversationList);
+        setPresets(presetList);
         setConnectionPresets(configData.presets);
         if (configData.config) {
           setConnectionPresetId(configData.config.presetId);
@@ -205,11 +207,11 @@ export function ChatClient({ user }: { user: User }) {
             setCustomDraft({ provider: configData.config.provider as CustomDraft["provider"], baseUrl: configData.config.baseUrl, model: configData.config.model });
           }
           setConfigNotice(`已保存服务端配置，API Key 末四位：${configData.config.apiKeyLast4}`);
-          setPresetId(presetData.presets.some((preset) => preset.id === "user-config") ? "user-config" : presetData.presets[0]?.id ?? "");
+          setPresetId(presetList.some((preset) => preset.id === "user-config") ? "user-config" : presetList[0]?.id ?? "");
           return;
         }
         const savedPreset = window.localStorage.getItem("ai-chater-preset");
-        setPresetId(presetData.presets.some((preset) => preset.id === savedPreset) ? savedPreset! : presetData.presets[0]?.id ?? "");
+        setPresetId(presetList.some((preset) => preset.id === savedPreset) ? savedPreset! : presetList[0]?.id ?? "");
         setConnectionPresetId(configData.presets[0]?.id ?? "");
       } catch (cause) {
         if (!cancelled) setError(cause instanceof Error ? cause.message : "加载失败。");
@@ -228,7 +230,7 @@ export function ChatClient({ user }: { user: User }) {
         return;
       }
       try {
-        const data = await requestJson<{ conversation: Conversation; messages: ChatMessage[] }>(`/api/conversations/${activeConversationId}`);
+        const data = await getConversation(activeConversationId);
         if (!cancelled && requestId === loadingConversationRef.current && !isSending) setMessages(data.messages);
       } catch (cause) {
         if (!cancelled) setError(cause instanceof Error ? cause.message : "加载会话失败。");
@@ -245,14 +247,10 @@ export function ChatClient({ user }: { user: User }) {
   }, [messages, isSending]);
 
   async function createConversation() {
-    const data = await requestJson<{ conversation: Conversation }>("/api/conversations", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "新对话" }),
-    });
-    setConversations((current) => [data.conversation, ...current]);
-    setActiveConversationId(data.conversation.id);
-    return data.conversation.id;
+    const conversation = await createConversationRequest("新对话");
+    setConversations((current) => [conversation, ...current]);
+    setActiveConversationId(conversation.id);
+    return conversation.id;
   }
 
   async function choosePreset(id: string) {
@@ -271,12 +269,7 @@ export function ChatClient({ user }: { user: User }) {
     setIsUploading(true);
     setError("");
     try {
-      const uploaded = await Promise.all(files.slice(0, Math.max(0, 4 - attachments.length)).map(async (file) => {
-        const formData = new FormData();
-        formData.append("file", file);
-        const response = await requestJson<{ attachment: PendingAttachment }>("/api/uploads", { method: "POST", body: formData });
-        return response.attachment;
-      }));
+      const uploaded = await Promise.all(files.slice(0, Math.max(0, 4 - attachments.length)).map((file) => uploadImage(file)));
       setAttachments((current) => [...current, ...uploaded]);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "图片上传失败。");
@@ -287,7 +280,7 @@ export function ChatClient({ user }: { user: User }) {
 
   async function removeAttachment(attachment: PendingAttachment) {
     try {
-      await requestJson(`/api/uploads/${attachment.id}`, { method: "DELETE" });
+      await removeUpload(attachment.id);
       setAttachments((current) => current.filter((item) => item.id !== attachment.id));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "移除图片失败。");
@@ -335,28 +328,13 @@ export function ChatClient({ user }: { user: User }) {
       conversationId ??= await createConversation();
       const controller = new AbortController();
       abortControllerRef.current = controller;
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conversationId, presetId, text: outgoingText, attachmentIds: outgoingAttachments.map((item) => item.id) }),
-        signal: controller.signal,
-      });
-      if (!response.ok || !response.body) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload.error ?? "模型请求失败。");
-      }
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
       let answer = "";
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        answer = appendStreamText(answer, decoder.decode(value, { stream: true }));
+      for await (const chunk of streamChat({ conversationId, presetId, text: outgoingText, attachmentIds: outgoingAttachments.map((item) => item.id) }, controller.signal)) {
+        answer = appendStreamText(answer, chunk);
         setMessages((current) => current.map((message) => message.id === optimisticAssistantId
           ? { ...message, status: "streaming", parts: [{ type: "text", text: answer }] }
           : message));
       }
-      answer = appendStreamText(answer, decoder.decode());
       setMessages((current) => current.map((message) => message.id === optimisticAssistantId
         ? { ...message, status: "complete", parts: [{ type: "text", text: answer }] }
         : message));
@@ -385,11 +363,7 @@ export function ChatClient({ user }: { user: User }) {
     const title = window.prompt("会话标题", activeConversation.title)?.trim();
     if (!title || title === activeConversation.title) return;
     try {
-      await requestJson(`/api/conversations/${activeConversation.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title }),
-      });
+      await renameConversationRequest(activeConversation.id, title);
       setConversations((current) => current.map((item) => item.id === activeConversation.id ? { ...item, title } : item));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "重命名失败。");
@@ -399,7 +373,7 @@ export function ChatClient({ user }: { user: User }) {
   async function deleteConversation(id: string) {
     if (!window.confirm("确定删除这个会话吗？图片和消息将一并删除。")) return;
     try {
-      await requestJson(`/api/conversations/${id}`, { method: "DELETE" });
+      await deleteConversationRequest(id);
       const next = conversations.filter((item) => item.id !== id);
       setConversations(next);
       if (activeConversationId === id) setActiveConversationId(next[0]?.id ?? null);
@@ -409,7 +383,7 @@ export function ChatClient({ user }: { user: User }) {
   }
 
   async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
+    await logoutRequest();
     router.replace("/login");
     router.refresh();
   }
@@ -436,8 +410,10 @@ export function ChatClient({ user }: { user: User }) {
     event.preventDefault(); setConfigError(""); setConfigNotice("");
     try {
       const payload = { kind: "image", ...imageConfigDraft, ...(imageApiKey ? { apiKey: imageApiKey } : {}) };
-      const isMultiEdit = savedConfigMode === "multi" && editingConfigId && !editingConfigId.startsWith("legacy-");
-      await requestJson(isMultiEdit ? `/api/me/model-configs/${editingConfigId}` : savedConfigMode === "multi" ? "/api/me/model-configs" : "/api/me/image-config", { method: isMultiEdit || savedConfigMode === "legacy" ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(savedConfigMode === "legacy" ? { ...imageConfigDraft, ...(imageApiKey ? { apiKey: imageApiKey } : {}) } : payload) });
+      const isMultiEdit = Boolean(savedConfigMode === "multi" && editingConfigId && !editingConfigId.startsWith("legacy-"));
+      if (isMultiEdit) await updateModelConfig(editingConfigId!, payload);
+      else if (savedConfigMode === "multi") await createModelConfig(payload);
+      else await saveLegacyImageConfig({ ...imageConfigDraft, ...(imageApiKey ? { apiKey: imageApiKey } : {}) });
       setImageApiKey(""); setEditingConfigId(null); setImageConfigRevision((current) => current + 1); setConfigNotice("已保存生图配置。");
       await loadSavedConfigs();
       setConfigView("saved");
@@ -446,7 +422,7 @@ export function ChatClient({ user }: { user: User }) {
 
   async function testImageConfig() {
     setConfigError(""); setConfigNotice("测试生图连接可能会真实生成图片并产生费用。");
-    try { await requestJson("/api/me/image-config/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...imageConfigDraft, ...(imageApiKey ? { apiKey: imageApiKey } : {}) }) }); setConfigNotice("生图连接测试成功。"); }
+    try { await testLegacyImageConfig({ ...imageConfigDraft, ...(imageApiKey ? { apiKey: imageApiKey } : {}) }); setConfigNotice("生图连接测试成功。"); }
     catch (cause) { setConfigError(cause instanceof Error ? cause.message : "生图配置服务尚未接入。"); }
   }
 
@@ -454,8 +430,9 @@ export function ChatClient({ user }: { user: User }) {
     if (!skipConfirmation && !window.confirm("确定删除这个生图配置吗？已保存的 API Key 也会一并删除。")) return;
     setConfigError("");
     try {
-      const isMultiEdit = savedConfigMode === "multi" && editingConfigId && !editingConfigId.startsWith("legacy-");
-      await requestJson(isMultiEdit ? `/api/me/model-configs/${editingConfigId}` : "/api/me/image-config", { method: "DELETE" });
+      const isMultiEdit = Boolean(savedConfigMode === "multi" && editingConfigId && !editingConfigId.startsWith("legacy-"));
+      if (isMultiEdit) await deleteModelConfig(editingConfigId!);
+      else await deleteLegacyImageConfig();
       setImageApiKey(""); setEditingConfigId(null); setImageConfigDraft({ name: "我的生图模型", provider: "xai-compatible", baseUrl: "", model: "" }); setImageConfigRevision((current) => current + 1); setConfigNotice("已删除生图配置。");
       await loadSavedConfigs();
     }
@@ -463,11 +440,11 @@ export function ChatClient({ user }: { user: User }) {
   }
 
   async function refreshPresets(selectedId?: string) {
-    const presetData = await requestJson<{ presets: AiPreset[] }>("/api/ai/presets");
-    setPresets(presetData.presets);
-    const nextPresetId = presetData.presets.some((preset) => preset.id === selectedId)
+    const presetList = await getChatPresets();
+    setPresets(presetList);
+    const nextPresetId = presetList.some((preset) => preset.id === selectedId)
       ? selectedId!
-      : presetData.presets[0]?.id ?? "";
+      : presetList[0]?.id ?? "";
     setPresetId(nextPresetId);
     window.localStorage.setItem("ai-chater-preset", nextPresetId);
   }
@@ -479,12 +456,12 @@ export function ChatClient({ user }: { user: User }) {
     try {
       const configPayload = getConfigPayload();
       const multiConfigPayload = getMultiChatConfigPayload();
-      const isMultiEdit = savedConfigMode === "multi" && editingConfigId && !editingConfigId.startsWith("legacy-");
-      const payload = await requestJson<{ config: SavedAiConfig | SavedWorkspaceConfig }>(isMultiEdit ? `/api/me/model-configs/${editingConfigId}` : savedConfigMode === "multi" ? "/api/me/model-configs" : "/api/me/ai-config", {
-        method: isMultiEdit || savedConfigMode === "legacy" ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(savedConfigMode === "legacy" ? configPayload : multiConfigPayload),
-      });
+      const isMultiEdit = Boolean(savedConfigMode === "multi" && editingConfigId && !editingConfigId.startsWith("legacy-"));
+      const payload = isMultiEdit
+        ? await updateModelConfig(editingConfigId!, multiConfigPayload)
+        : savedConfigMode === "multi"
+          ? await createModelConfig(multiConfigPayload)
+          : await saveLegacyChatConfig(configPayload);
       if (savedConfigMode === "legacy") {
         const saved = payload.config as SavedAiConfig;
         setConnectionPresetId(saved.presetId);
@@ -526,11 +503,7 @@ export function ChatClient({ user }: { user: User }) {
     setConfigNotice("");
     setIsTestingConnection(true);
     try {
-      const result = await requestJson<{ ok: true; model: string }>("/api/me/ai-config/test", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(getConfigPayload()),
-      });
+      const result = await testLegacyChatConfig(getConfigPayload());
       setConfigNotice(`连接测试成功，可以保存配置（${result.model}）`);
     } catch (cause) {
       setConfigError(cause instanceof Error ? cause.message : "连接测试失败，请检查 API Key、Base URL 和 Model。");
@@ -543,8 +516,9 @@ export function ChatClient({ user }: { user: User }) {
     if (!skipConfirmation && !window.confirm("确定删除这个对话配置吗？已保存的 API Key 也会一并删除。")) return;
     setConfigError("");
     try {
-      const isMultiEdit = savedConfigMode === "multi" && editingConfigId && !editingConfigId.startsWith("legacy-");
-      await requestJson(isMultiEdit ? `/api/me/model-configs/${editingConfigId}` : "/api/me/ai-config", { method: "DELETE" });
+      const isMultiEdit = Boolean(savedConfigMode === "multi" && editingConfigId && !editingConfigId.startsWith("legacy-"));
+      if (isMultiEdit) await deleteModelConfig(editingConfigId!);
+      else await deleteLegacyChatConfig();
       setConnectionPresetId(connectionPresets[0]?.id ?? "");
       setChatConfigName("我的对话配置");
       setCustomDraft({ provider: "openai-compatible", baseUrl: "", model: "" });
@@ -603,7 +577,7 @@ export function ChatClient({ user }: { user: User }) {
         if (config.kind === "chat") await clearConfig(true);
         else await clearImageConfig(true);
       } else {
-        await requestJson(`/api/me/model-configs/${config.id}`, { method: "DELETE" });
+        await deleteModelConfig(config.id);
         if (config.kind === "chat") await refreshPresets(config.runtimePresetId === presetId ? undefined : presetId);
         else {
           if (config.runtimePresetId === preferredImagePresetId) {

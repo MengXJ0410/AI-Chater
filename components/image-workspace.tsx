@@ -4,17 +4,12 @@ import { ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
 import { LoaderCircle } from "lucide-react";
 import { ImageComposer } from "@/components/image-composer";
 import { GeneratedImageGrid } from "@/components/generated-image-grid";
-import { getImageGenerationFailureMessage, getImageRequestError, imagesFromGeneration, normalizeImagePreset, type GeneratedImage, type ImageGenerationDraft, type ImageGenerationResponse, type ImagePreset } from "@/client/image/generation-client";
+import { getImageGenerationFailureMessage, imagesFromGeneration, normalizeImagePreset, type GeneratedImage, type ImageGenerationDraft, type ImagePreset } from "@/client/image/generation-client";
+import { getImagePresets } from "@/client/api/presets";
+import { removeUpload, uploadImage } from "@/client/api/uploads";
+import { cancelImageGeneration, createImageGeneration, getImageGeneration } from "@/client/api/image";
 
 type ReferenceImage = { id: string; originalName: string };
-type AttachmentResponse = { attachment: ReferenceImage };
-
-async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, init);
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(getImageRequestError(response.status, payload.error));
-  return payload as T;
-}
 
 const MAX_QUEUED_WAIT_MS = 60_000;
 
@@ -49,9 +44,9 @@ export function ImageWorkspace({ configRevision, preferredPresetId, onPreferredP
       setIsLoadingPresets(true);
       setError("");
       try {
-        const data = await requestJson<{ presets: Record<string, unknown>[] }>("/api/ai/image-presets");
+        const rawPresets = await getImagePresets();
         if (cancelled) return;
-        const normalized = data.presets.map(normalizeImagePreset).filter((item): item is ImagePreset => Boolean(item));
+        const normalized = rawPresets.map(normalizeImagePreset).filter((item): item is ImagePreset => Boolean(item));
         setPresets(normalized);
         selectDefaults(normalized, preferredPresetId);
       } catch (cause) {
@@ -73,14 +68,14 @@ export function ImageWorkspace({ configRevision, preferredPresetId, onPreferredP
     if (!files.length) return;
     setIsUploading(true); setError("");
     try {
-      const uploaded = await Promise.all(files.map(async (file) => { const form = new FormData(); form.append("file", file); return (await requestJson<AttachmentResponse>("/api/uploads", { method: "POST", body: form })).attachment; }));
+      const uploaded = await Promise.all(files.map((file) => uploadImage(file)));
       setReferences((current) => [...current, ...uploaded]);
       setDraft((current) => ({ ...current, referenceAttachmentIds: [...current.referenceAttachmentIds, ...uploaded.map((item) => item.id)] }));
     } catch (cause) { setError(cause instanceof Error ? cause.message : "参考图上传失败。"); } finally { setIsUploading(false); }
   }
 
   async function removeReference(id: string) {
-    try { await requestJson(`/api/uploads/${id}`, { method: "DELETE" }); } catch { /* The local reference can still be removed when cleanup is unavailable. */ }
+    try { await removeUpload(id); } catch { /* The local reference can still be removed when cleanup is unavailable. */ }
     setReferences((current) => current.filter((item) => item.id !== id));
     setDraft((current) => ({ ...current, referenceAttachmentIds: current.referenceAttachmentIds.filter((item) => item !== id) }));
   }
@@ -91,19 +86,19 @@ export function ImageWorkspace({ configRevision, preferredPresetId, onPreferredP
     const controller = new AbortController(); abortRef.current = controller;
     try {
       const targetConversationId = conversationId ?? await ensureConversation();
-      let data = await requestJson<ImageGenerationResponse>("/api/image-generations", { method: "POST", headers: { "Content-Type": "application/json" }, signal: controller.signal, body: JSON.stringify({ requestId: crypto.randomUUID(), conversationId: targetConversationId, imagePresetId: selectedPreset.id, prompt: draft.prompt.trim(), referenceAttachmentIds: draft.referenceAttachmentIds, aspectRatio: draft.aspectRatio, resolution: draft.resolution || "1k", quality: draft.quality || "high", source: "image-mode" }) });
-      generationIdRef.current = data.generation.id;
+      let generation = await createImageGeneration({ requestId: crypto.randomUUID(), conversationId: targetConversationId, imagePresetId: selectedPreset.id, prompt: draft.prompt.trim(), referenceAttachmentIds: draft.referenceAttachmentIds, aspectRatio: draft.aspectRatio, resolution: draft.resolution || "1k", quality: draft.quality || "high", source: "image-mode" }, controller.signal);
+      generationIdRef.current = generation.id;
       const queuedAt = Date.now();
-      while (["queued", "running", "cancel_requested"].includes(data.generation.status)) {
-        if (data.generation.status === "queued" && Date.now() - queuedAt >= MAX_QUEUED_WAIT_MS) {
+      while (["queued", "running", "cancel_requested"].includes(generation.status)) {
+        if (generation.status === "queued" && Date.now() - queuedAt >= MAX_QUEUED_WAIT_MS) {
           throw new Error("任务排队时间较长，请确认后端 image worker 已启动。未重复提交请求。");
         }
         await new Promise((resolve) => window.setTimeout(resolve, 1000));
-        data = await requestJson<ImageGenerationResponse>(`/api/image-generations/${data.generation.id}`, { signal: controller.signal });
+        generation = await getImageGeneration(generation.id, controller.signal);
       }
-      if (data.generation.status === "failed") throw new Error(getImageGenerationFailureMessage(data.generation.errorCode));
-      if (data.generation.status === "cancelled") return;
-      setImages(imagesFromGeneration(data.generation));
+      if (generation.status === "failed") throw new Error(getImageGenerationFailureMessage(generation.errorCode));
+      if (generation.status === "cancelled") return;
+      setImages(imagesFromGeneration(generation));
     } catch (cause) {
       if (!(cause instanceof DOMException && cause.name === "AbortError")) setError(cause instanceof Error ? cause.message : "生图失败，请稍后重试。");
     } finally { abortRef.current = null; generationIdRef.current = null; setIsGenerating(false); }
@@ -111,7 +106,7 @@ export function ImageWorkspace({ configRevision, preferredPresetId, onPreferredP
 
   async function stopGeneration() {
     const id = generationIdRef.current;
-    if (id) await fetch(`/api/image-generations/${id}`, { method: "DELETE" }).catch(() => undefined);
+    if (id) await cancelImageGeneration(id).catch(() => undefined);
     abortRef.current?.abort();
   }
 

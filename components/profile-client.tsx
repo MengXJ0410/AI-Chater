@@ -6,6 +6,8 @@ import { ChangeEvent, PointerEvent, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Crop, ImagePlus, LoaderCircle, Trash2, Upload, X } from "lucide-react";
 import { clampAvatarCropPosition, getAvatarCropScale, type AvatarCropPosition } from "@/client/avatar-crop";
 import { getAvatarFileError } from "@/client/user-avatar";
+import { ApiRequestError } from "@/client/api/http";
+import { getProfile, removeAvatar as removeAvatarRequest, uploadAvatar } from "@/client/api/profile";
 import { UserAvatar } from "@/components/user-avatar";
 
 type ProfileUser = { id: string; username: string; avatarUrl?: string | null };
@@ -14,10 +16,6 @@ type CropSource = { file: File; url: string; width: number; height: number; zoom
 
 const PREVIEW_SIZE = 280;
 const OUTPUT_SIZE = 512;
-
-function readError(payload: unknown, fallback: string) {
-  return typeof payload === "object" && payload && "error" in payload && typeof payload.error === "string" ? payload.error : fallback;
-}
 
 export function ProfileClient({ initialUser }: { initialUser: ProfileUser }) {
   const [profile, setProfile] = useState<ProfilePayload>({ user: initialUser, avatarServiceAvailable: false });
@@ -35,22 +33,19 @@ export function ProfileClient({ initialUser }: { initialUser: ProfileUser }) {
     let cancelled = false;
     async function loadProfile() {
       try {
-        const response = await fetch("/api/me/profile", { cache: "no-store" });
-        if (response.status === 404) {
-          if (!cancelled) setServiceState("unavailable");
-          return;
-        }
-        const payload = await response.json().catch(() => null);
-        if (!response.ok) throw new Error(readError(payload, "无法读取个人资料。"));
+        const payload = await getProfile();
         if (!cancelled) {
-          setProfile(payload as ProfilePayload);
-          setServiceState((payload as ProfilePayload).avatarServiceAvailable ? "available" : "unavailable");
+          setProfile(payload);
+          setServiceState(payload.avatarServiceAvailable ? "available" : "unavailable");
         }
       } catch (cause) {
-        if (!cancelled) {
-          setError(cause instanceof Error ? cause.message : "无法读取个人资料。");
+        if (cancelled) return;
+        if (cause instanceof ApiRequestError && cause.status === 404) {
           setServiceState("unavailable");
+          return;
         }
+        setError(cause instanceof Error ? cause.message : "无法读取个人资料。");
+        setServiceState("unavailable");
       }
     }
     void loadProfile();
@@ -143,12 +138,8 @@ export function ProfileClient({ initialUser }: { initialUser: ProfileUser }) {
       context.drawImage(image, baseX + position.x * OUTPUT_SIZE / frameSize, baseY + position.y * OUTPUT_SIZE / frameSize, scaledWidth, scaledHeight);
       const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/webp", 0.9));
       if (!blob) throw new Error("头像导出失败，请重试。");
-      const formData = new FormData();
-      formData.append("avatar", new File([blob], "avatar.webp", { type: "image/webp" }));
-      const response = await fetch("/api/me/avatar", { method: "PUT", body: formData });
-      const payload = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(readError(payload, "头像上传失败。"));
-      setProfile((current) => ({ ...current, user: { ...current.user, avatarUrl: (payload as { avatarUrl: string }).avatarUrl } }));
+      const { avatarUrl } = await uploadAvatar(new File([blob], "avatar.webp", { type: "image/webp" }));
+      setProfile((current) => ({ ...current, user: { ...current.user, avatarUrl } }));
       closeCrop();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "头像上传失败。");
@@ -162,9 +153,7 @@ export function ProfileClient({ initialUser }: { initialUser: ProfileUser }) {
     setIsSaving(true);
     setError("");
     try {
-      const response = await fetch("/api/me/avatar", { method: "DELETE" });
-      const payload = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(readError(payload, "头像删除失败。"));
+      await removeAvatarRequest();
       setProfile((current) => ({ ...current, user: { ...current.user, avatarUrl: null } }));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "头像删除失败。");

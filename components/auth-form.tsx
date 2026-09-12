@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
+import { login, register } from "@/client/api/auth";
 
 export function AuthForm({ mode }: { mode: "login" | "register" }) {
   const router = useRouter();
@@ -18,13 +19,8 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
     setBusy(true);
     setError("");
     try {
-      const response = await fetch(`/api/auth/${mode}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? "操作失败，请重试。");
+      if (isRegister) await register({ username, password });
+      else await login({ username, password });
       router.replace("/");
       router.refresh();
     } catch (cause) {

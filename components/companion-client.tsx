@@ -3,6 +3,8 @@
 import { AlertTriangle, ArrowLeft, ExternalLink, LoaderCircle, Radio, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { launchCompanion } from "@/client/api/companion";
+import { listSavedModelConfigs } from "@/client/api/model-configs";
 
 type ModelConfig = {
   id: string;
@@ -52,10 +54,9 @@ export function CompanionClient({ username, runtimeUrl }: Props) {
     setFrameState("loading");
     setLoadingMessage("正在读取模型配置");
     try {
-      const configResponse = await fetch("/api/me/model-configs", { cache: "no-store" });
-      if (!configResponse.ok) throw new Error("无法读取模型配置。");
-      const configData = await configResponse.json() as { configs: ModelConfig[] };
-      const chatConfigs = configData.configs.filter((config) => config.kind === "chat");
+      const { ok, configs: loadedConfigs } = await listSavedModelConfigs();
+      if (!ok) throw new Error("无法读取模型配置。");
+      const chatConfigs = (loadedConfigs as ModelConfig[]).filter((config) => config.kind === "chat");
       setConfigs(chatConfigs);
       let nextConfigId = "";
       setSelectedConfigId((current) => {
@@ -72,10 +73,8 @@ export function CompanionClient({ username, runtimeUrl }: Props) {
       setLoadingMessage("正在检查 AIRI Stage Web");
       await assertRuntimeAvailable(runtimeUrl);
       setLoadingMessage("正在加载 AIRI 角色");
-      const launchResponse = await fetch("/api/companion/launch", { method: "POST" });
-      const launchData = await launchResponse.json() as { ticket?: string; target?: string; error?: string };
-      if (!launchResponse.ok || !launchData.ticket) throw new Error(launchData.error || "Companion 启动票据创建失败。");
-      setTicket(launchData.ticket);
+      const launch = await launchCompanion();
+      setTicket(launch.ticket);
       setFrameState("loading");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Companion 启动失败。");
