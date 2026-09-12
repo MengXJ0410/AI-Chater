@@ -2,49 +2,87 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { Bug, RotateCcw } from "lucide-react";
+import { Bug, RotateCcw, Save, Trash2 } from "lucide-react";
 import {
+  createSpiderPreset,
   DEFAULT_SPIDER_TUNING,
   defaultPetPreferences,
   dispatchPetChange,
   getSpiderTuning,
   parsePetPreferences,
+  parseSpiderPresets,
   PET_CHANGE_EVENT,
   PET_STORAGE_KEY,
   resetSpiderTuning,
   savePetPreferences,
+  saveSpiderPresets,
+  SPIDER_PAIR_LABELS,
+  SPIDER_PRESET_STORAGE_KEY,
   SPIDER_TUNING_CHANGE_EVENT,
   updateSpiderTuning,
   type PetPreferences,
+  type SpiderPairTuning,
+  type SpiderPreset,
   type SpiderTuning,
 } from "@/client/pet";
+
+function TuneSlider({
+  label,
+  value,
+  min,
+  max,
+  step = 1,
+  format,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  format?: (value: number) => string;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="appearance-slider">
+      <span>{label} <output>{format ? format(value) : value}</output></span>
+      <input type="range" min={min} max={max} step={step} value={value} onChange={(event) => onChange(Number(event.target.value))} />
+    </label>
+  );
+}
 
 export function PetControl() {
   const pathname = usePathname();
   const [pet, setPet] = useState<PetPreferences>(defaultPetPreferences);
   const [tuning, setTuning] = useState<SpiderTuning>(DEFAULT_SPIDER_TUNING);
+  const [pairIndex, setPairIndex] = useState(0);
+  const [presets, setPresets] = useState<SpiderPreset[]>([]);
+  const [presetName, setPresetName] = useState("");
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const saved = parsePetPreferences(window.localStorage.getItem(PET_STORAGE_KEY));
-    void Promise.resolve().then(() => setPet(saved));
+    const savedPresets = parseSpiderPresets(window.localStorage.getItem(SPIDER_PRESET_STORAGE_KEY));
+    void Promise.resolve().then(() => {
+      setPet(saved);
+      setTuning(getSpiderTuning());
+      setPresets(savedPresets);
+    });
     const handlePetChange = (event: Event) => {
       const detail = (event as CustomEvent<PetPreferences>).detail;
       if (detail && typeof detail === "object") setPet({ ...defaultPetPreferences, ...detail });
     };
-    window.addEventListener(PET_CHANGE_EVENT, handlePetChange);
-    return () => window.removeEventListener(PET_CHANGE_EVENT, handlePetChange);
-  }, []);
-
-  useEffect(() => {
-    void Promise.resolve().then(() => setTuning(getSpiderTuning()));
     const handleTuningChange = (event: Event) => {
       const detail = (event as CustomEvent<SpiderTuning>).detail;
       if (detail && typeof detail === "object") setTuning(detail);
     };
+    window.addEventListener(PET_CHANGE_EVENT, handlePetChange);
     window.addEventListener(SPIDER_TUNING_CHANGE_EVENT, handleTuningChange);
-    return () => window.removeEventListener(SPIDER_TUNING_CHANGE_EVENT, handleTuningChange);
+    return () => {
+      window.removeEventListener(PET_CHANGE_EVENT, handlePetChange);
+      window.removeEventListener(SPIDER_TUNING_CHANGE_EVENT, handleTuningChange);
+    };
   }, []);
 
   useEffect(() => {
@@ -78,7 +116,32 @@ export function PetControl() {
     setTuning(updateSpiderTuning(partial));
   }
 
+  function changePair(partial: Partial<SpiderPairTuning>) {
+    const pairs = tuning.pairs.map((pair, index) => (index === pairIndex ? { ...pair, ...partial } : pair));
+    setTuning(updateSpiderTuning({ pairs }));
+  }
+
+  function persistPresets(next: SpiderPreset[]) {
+    setPresets(next);
+    saveSpiderPresets(next);
+  }
+
+  function handleSavePreset() {
+    persistPresets([...presets, createSpiderPreset(presetName, getSpiderTuning())]);
+    setPresetName("");
+  }
+
+  function handleLoadPreset(preset: SpiderPreset) {
+    setTuning(updateSpiderTuning(preset.tuning));
+  }
+
+  function handleDeletePreset(id: string) {
+    persistPresets(presets.filter((preset) => preset.id !== id));
+  }
+
   if (pathname !== "/") return null;
+
+  const pair = tuning.pairs[pairIndex] ?? DEFAULT_SPIDER_TUNING.pairs[0];
 
   return (
     <div className="pet-control" ref={rootRef}>
@@ -102,26 +165,50 @@ export function PetControl() {
           </label>
 
           <div className="appearance-divider" />
-          <div className="appearance-panel-header"><span>身体姿态</span></div>
-          <label className="appearance-slider">
-            <span>腿部伸展 <output>{tuning.restReach.toFixed(2)}</output></span>
-            <input type="range" min="0.4" max="0.9" step="0.01" value={tuning.restReach} onChange={(event) => changeTuning({ restReach: Number(event.target.value) })} />
-          </label>
-          <label className="appearance-slider">
-            <span>跗节角度 <output>{tuning.tarsusBend}°</output></span>
-            <input type="range" min="-40" max="40" step="1" value={tuning.tarsusBend} onChange={(event) => changeTuning({ tarsusBend: Number(event.target.value) })} />
-          </label>
-          <label className="appearance-slider">
-            <span>抬腿高度 <output>{tuning.legLift}px</output></span>
-            <input type="range" min="2" max="14" step="1" value={tuning.legLift} onChange={(event) => changeTuning({ legLift: Number(event.target.value) })} />
-          </label>
-          <label className="appearance-slider">
-            <span>步幅 <output>{tuning.stride.toFixed(2)}</output></span>
-            <input type="range" min="0.1" max="0.5" step="0.01" value={tuning.stride} onChange={(event) => changeTuning({ stride: Number(event.target.value) })} />
-          </label>
-          <button className={`appearance-pet-toggle ${tuning.kneeFlip === -1 ? "is-active" : ""}`} type="button" aria-pressed={tuning.kneeFlip === -1} onClick={() => changeTuning({ kneeFlip: tuning.kneeFlip === -1 ? 1 : -1 })}>
-            {tuning.kneeFlip === -1 ? "弯曲镜像：开" : "弯曲镜像：关"}
+          <div className="appearance-panel-header"><span>足对参数 · {SPIDER_PAIR_LABELS[pairIndex]}</span></div>
+          <div className="pet-pair-tabs" role="group" aria-label="选择足对">
+            {SPIDER_PAIR_LABELS.map((label, index) => (
+              <button className={index === pairIndex ? "is-selected" : ""} type="button" aria-pressed={index === pairIndex} key={label} onClick={() => setPairIndex(index)}>{label}</button>
+            ))}
+          </div>
+          <TuneSlider label="股节" value={pair.femur} min={12} max={46} onChange={(femur) => changePair({ femur })} />
+          <TuneSlider label="胫节" value={pair.tibia} min={14} max={52} onChange={(tibia) => changePair({ tibia })} />
+          <TuneSlider label="跗节" value={pair.tarsus} min={6} max={32} onChange={(tarsus) => changePair({ tarsus })} />
+          <TuneSlider label="朝向" value={pair.restAngle} min={-10} max={190} format={(value) => `${value}°`} onChange={(restAngle) => changePair({ restAngle })} />
+          <TuneSlider label="髋部 X" value={pair.hipX} min={-12} max={12} step={0.5} onChange={(hipX) => changePair({ hipX })} />
+          <TuneSlider label="髋部 Y" value={pair.hipY} min={1} max={12} step={0.5} onChange={(hipY) => changePair({ hipY })} />
+          <TuneSlider label="步幅" value={pair.stride} min={0} max={0.6} step={0.01} format={(value) => value.toFixed(2)} onChange={(stride) => changePair({ stride })} />
+          <TuneSlider label="跗节角度" value={pair.tarsusBend} min={-45} max={45} format={(value) => `${value}°`} onChange={(tarsusBend) => changePair({ tarsusBend })} />
+          <button className={`appearance-pet-toggle ${pair.kneeFlip === -1 ? "is-active" : ""}`} type="button" aria-pressed={pair.kneeFlip === -1} onClick={() => changePair({ kneeFlip: pair.kneeFlip === -1 ? 1 : -1 })}>
+            {pair.kneeFlip === -1 ? "弯曲镜像：开" : "弯曲镜像：关"}
           </button>
+
+          <div className="appearance-divider" />
+          <div className="appearance-panel-header"><span>全局姿态</span></div>
+          <TuneSlider label="腿部伸展" value={tuning.restReach} min={0.3} max={0.9} step={0.01} format={(value) => value.toFixed(2)} onChange={(restReach) => changeTuning({ restReach })} />
+          <TuneSlider label="抬脚阈值" value={tuning.stepReach} min={0.7} max={1} step={0.01} format={(value) => value.toFixed(2)} onChange={(stepReach) => changeTuning({ stepReach })} />
+          <TuneSlider label="转身阈值" value={tuning.stepAngle} min={0.3} max={1.8} step={0.05} format={(value) => value.toFixed(2)} onChange={(stepAngle) => changeTuning({ stepAngle })} />
+          <TuneSlider label="抬腿高度" value={tuning.legLift} min={2} max={16} format={(value) => `${value}px`} onChange={(legLift) => changeTuning({ legLift })} />
+          <TuneSlider label="摆动时长" value={tuning.swingDuration} min={0.06} max={0.4} step={0.01} format={(value) => `${value.toFixed(2)}s`} onChange={(swingDuration) => changeTuning({ swingDuration })} />
+          <TuneSlider label="基础步幅" value={tuning.stride} min={0} max={1} step={0.01} format={(value) => value.toFixed(2)} onChange={(stride) => changeTuning({ stride })} />
+          <TuneSlider label="急转阈值" value={tuning.pivotAngle} min={0} max={3.14} step={0.02} format={(value) => value.toFixed(2)} onChange={(pivotAngle) => changeTuning({ pivotAngle })} />
+
+          <div className="appearance-divider" />
+          <div className="appearance-panel-header"><span>参数预设</span></div>
+          <div className="pet-preset-save">
+            <input type="text" value={presetName} placeholder="预设名称" aria-label="预设名称" onChange={(event) => setPresetName(event.target.value)} />
+            <button className="appearance-icon-button" data-tooltip="保存当前为预设" type="button" aria-label="保存当前为预设" onClick={handleSavePreset}><Save size={16} /></button>
+          </div>
+          {presets.length ? (
+            <div className="pet-preset-list">
+              {presets.map((preset) => (
+                <div className="pet-preset-row" key={preset.id}>
+                  <button className="pet-preset-load" type="button" title="载入预设" onClick={() => handleLoadPreset(preset)}>{preset.name}</button>
+                  <button className="appearance-icon-button" type="button" aria-label={`删除预设 ${preset.name}`} onClick={() => handleDeletePreset(preset.id)}><Trash2 size={15} /></button>
+                </div>
+              ))}
+            </div>
+          ) : <p className="pet-preset-empty">还没有预设</p>}
         </section>
       ) : null}
       <button className="appearance-trigger" data-tooltip="桌宠设置" type="button" aria-label="桌宠设置" aria-expanded={open} onClick={() => setOpen((current) => !current)}>🕷️</button>

@@ -22,27 +22,38 @@
 
 ### 腿部调参（无需重新构建）
 
-所有腿部几何/弯曲参数集中在 `client/pet/spider.ts` 的 `DEFAULT_SPIDER_TUNING`：
+所有参数集中在 `client/pet/spider.ts` 的 `DEFAULT_SPIDER_TUNING`，**四对足各自独立**（`pairs[0..3]`，前→后，左右自动镜像）：
 
-| 字段 | 含义 | 典型范围 |
+单对足（`pairs[i]`）：
+
+| 字段 | 含义 | 面板范围 |
 | --- | --- | --- |
-| `femur` / `tibia` / `tarsus` | 四对腿的股节/胫节/跗节长度 | 各 4 个数 |
-| `restAngle` | 四对腿基准朝向（度，相对身体正前方） | 0–180 |
-| `hipX` / `hipY` | 髋部在身体局部坐标 | 小范围 |
-| `restReach` | 静止伸展比例：越大腿越直、膝弯越小 | 0.4–0.9 |
-| `stepReach` | 移动时超过该伸展比例就抬脚 | 0.8–1.0 |
-| `stepAngle` | 移动时足端方向偏差超过该弧度就抬脚（转身重摆） | 0.5–1.5 |
+| `femur` / `tibia` / `tarsus` | 股节/胫节/跗节长度 | 12–46 / 14–52 / 6–32 |
+| `restAngle` | 基准朝向（度，相对身体正前方） | −10–190 |
+| `hipX` / `hipY` | 髋部在身体局部坐标 | −12–12 / 1–12 |
+| `stride` | 该对腿的前伸步幅倍率（全局 `stride` 的倍数） | 0–0.6 |
 | `tarsusBend` | 跗节折角（度，0 直线，负值反向） | −45–45 |
-| `stride` | 前后腿步幅系数 | 0.1–0.5 |
-| `legLift` | 抬脚高度（px） | 2–14 |
-| `kneeFlip` | 膝/跗节整体镜像：1 或 −1 | 1 / −1 |
+| `kneeFlip` | 膝/跗节弯曲侧镜像 1 / −1 | 开关 |
 
-运行时覆盖（面板滑条实时生效，也支持持久化与查询串）：
+全局：
 
-- 面板：右下角 🕷️「桌宠设置」→「身体姿态」直接拖动滑条，立即生效并写入 `localStorage`。
-- 控制台：`localStorage.setItem("ai-chater-spider-tuning", JSON.stringify({ tarsusBend: -20, restReach: 0.5 }))`。
-- URL：`/?spiderTuning=${encodeURIComponent('{"tarsusBend":-20,"restReach":0.5}')}`，优先级高于 localStorage（刷新时读取）。
-- 非法字段自动回退默认值；解析逻辑 `resolveSpiderTuning(stored, query)` 与实时应用 `updateSpiderTuning`/`resetSpiderTuning` 均可单测。
+| 字段 | 含义 | 面板范围 |
+| --- | --- | --- |
+| `restReach` | 静止伸展比例：越大腿越直、膝弯越小 | 0.3–0.9 |
+| `stepReach` | 移动时超过该伸展比例就抬脚 | 0.7–1.0 |
+| `stepAngle` | 足端方向偏差超过该弧度就抬脚 | 0.3–1.8 |
+| `legLift` | 抬脚高度（px） | 2–16 |
+| `swingDuration` | 单次摆动基础时长（秒，越小步频越快） | 0.06–0.4 |
+| `stride` | 全局基础步幅（所有腿沿运动方向前伸的基准） | 0–2 |
+| `pivotAngle` | 单帧朝向变化超过该弧度时所有落点作废重摆，修复急转时后腿挂在身后的问题 | 0–π |
+
+运行时覆盖与预设：
+
+- 面板：右下角 🕷️「桌宠设置」→ 选择足对后拖动滑条，实时生效并写入 `localStorage`。
+- 预设：面板「参数预设」可命名保存当前整套参数到 `localStorage["ai-chater-spider-presets-v1"]`，点击名称载入、垃圾桶删除。
+- 控制台 / URL：`localStorage.setItem("ai-chater-spider-tuning", JSON.stringify({ restReach: 0.5, pairs: [{ femur: 40 }] }))`；或 `/?spiderTuning=<encodeURIComponent(JSON)>`（优先级高于 localStorage，刷新时读取）。
+- 非法/越界字段自动夹紧或回退默认值；`normalizeSpiderTuning`、`resolveSpiderTuning`、`updateSpiderTuning`、`resetSpiderTuning`、`parseSpiderPresets` 均可单测。
+
 
 
 ## 一、目标与范围

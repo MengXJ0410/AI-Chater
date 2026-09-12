@@ -4948,6 +4948,22 @@ body:has(.chat-app) .appearance-backdrop {
 .pet-control { position: fixed; right: 1.25rem; bottom: 5.25rem; z-index: 50; }
 .pet-panel { max-height: min(72vh, 36rem); overflow-y: auto; }
 
+.pet-pair-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.25rem; margin: 0.4rem 0 0.55rem; }
+.pet-pair-tabs button { min-height: 1.9rem; border: 1px solid color-mix(in srgb, var(--accent-border, #b9cabf) 70%, transparent); border-radius: 5px; background: transparent; color: #405249; font-size: 0.72rem; }
+.pet-pair-tabs button.is-selected { border-color: var(--accent, #1fbbbb); background: color-mix(in srgb, var(--accent-soft, #e3f2ec) 70%, transparent); color: var(--accent-strong, #12634f); font-weight: 700; }
+
+.pet-preset-save { display: flex; gap: 0.35rem; align-items: center; margin-top: 0.45rem; }
+.pet-preset-save input { flex: 1; min-width: 0; border: 1px solid color-mix(in srgb, var(--accent-border, #b9cabf) 70%, transparent); border-radius: 5px; background: rgba(255, 255, 255, 0.9); padding: 0.4rem 0.5rem; font-size: 0.76rem; color: #244f40; }
+.pet-preset-list { display: grid; gap: 0.3rem; margin-top: 0.5rem; }
+.pet-preset-row { display: flex; align-items: center; gap: 0.3rem; }
+.pet-preset-load { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; border: 1px solid color-mix(in srgb, var(--accent-border, #b9cabf) 55%, transparent); border-radius: 5px; background: color-mix(in srgb, var(--accent-soft, #e3f2ec) 40%, transparent); color: #244f40; padding: 0.35rem 0.5rem; font-size: 0.75rem; }
+.pet-preset-load:hover { border-color: var(--accent, #1fbbbb); }
+.pet-preset-empty { margin: 0.4rem 0 0; color: var(--text-faint, #8392a1); font-size: 0.72rem; }
+
+:root[data-color-mode="dark"] .pet-pair-tabs button,
+:root[data-color-mode="dark"] .pet-preset-load,
+:root[data-color-mode="dark"] .pet-preset-save input { color: var(--text-muted); background: var(--surface-input); border-color: var(--border); }
+
 @media (max-width: 700px) {
   .pet-control { right: 1rem; bottom: 4.75rem; }
 }

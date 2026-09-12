@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  createSpiderPreset,
   createSpiderState,
   DEFAULT_SPIDER_TUNING,
   defaultPetPreferences,
@@ -8,7 +9,9 @@ import {
   hipPoint,
   legMaxReach,
   legStrideFactor,
+  normalizeSpiderTuning,
   parsePetPreferences,
+  parseSpiderPresets,
   pickWanderHeading,
   resolveSpiderTuning,
   resetSpiderTuning,
@@ -81,19 +84,21 @@ describe("spider legs", () => {
     expect(under.knee.y).toBeLessThan(0);
   });
 
-  it("biases stride forward for front legs and backward for rear legs", () => {
+  it("uses a non-negative stride for every pair", () => {
+    for (const leg of SPIDER_LEGS) {
+      expect(legStrideFactor(leg)).toBeGreaterThanOrEqual(0);
+    }
     const front = SPIDER_LEGS.find((leg) => leg.pair === 0)!;
     const rear = SPIDER_LEGS.find((leg) => leg.pair === 3)!;
-    expect(legStrideFactor(front)).toBeGreaterThan(0.5);
-    expect(legStrideFactor(rear)).toBeLessThan(-0.5);
+    expect(legStrideFactor(front)).toBeGreaterThanOrEqual(legStrideFactor(rear));
   });
 
-  it("aims the front legs ahead along the travel direction when moving", () => {
+  it("aims every pair forward along the travel direction when moving (rear legs no longer hang)", () => {
     const rest = { x: 0, y: 0 };
     const front = strideTarget(SPIDER_LEGS[0], rest, 200, 0, 60);
     const rear = strideTarget(SPIDER_LEGS[3], rest, 200, 0, 60);
     expect(front.x).toBeGreaterThan(0);
-    expect(rear.x).toBeLessThan(0);
+    expect(rear.x).toBeGreaterThan(0);
     expect(strideTarget(SPIDER_LEGS[0], rest, 0, 0, 60)).toEqual(rest);
   });
 
@@ -132,19 +137,39 @@ describe("spider steering", () => {
 });
 
 describe("spider tuning", () => {
-  it("merges runtime overrides and ignores invalid values", () => {
-    const tuned = resolveSpiderTuning('{"tarsusBend":-25,"restReach":0.5,"kneeFlip":-1}', null);
-    expect(tuned.tarsusBend).toBe(-25);
+  it("reads per-pair overrides and ignores invalid values", () => {
+    const tuned = resolveSpiderTuning('{"restReach":0.5,"pairs":[{"femur":40,"tarsusBend":-25,"kneeFlip":-1}]}', null);
     expect(tuned.restReach).toBe(0.5);
-    expect(tuned.kneeFlip).toBe(-1);
+    expect(tuned.pairs[0].femur).toBe(40);
+    expect(tuned.pairs[0].tarsusBend).toBe(-25);
+    expect(tuned.pairs[0].kneeFlip).toBe(-1);
+    expect(tuned.pairs[1].femur).toBe(DEFAULT_SPIDER_TUNING.pairs[1].femur);
 
-    const invalid = resolveSpiderTuning("not-json", '{"femur":[1,2],"legLift":"x"}');
-    expect(invalid.femur).toEqual(DEFAULT_SPIDER_TUNING.femur);
+    const invalid = resolveSpiderTuning("not-json", '{"pairs":"x","legLift":"x"}');
+    expect(invalid.pairs[0]).toEqual(DEFAULT_SPIDER_TUNING.pairs[0]);
     expect(invalid.legLift).toBe(DEFAULT_SPIDER_TUNING.legLift);
+  });
+
+  it("clamps out-of-range values", () => {
+    const tuned = normalizeSpiderTuning({ restReach: 99, legLift: -5, pairs: [{ femur: 9999, stride: -3 }] });
+    expect(tuned.restReach).toBeLessThanOrEqual(1);
+    expect(tuned.legLift).toBe(0);
+    expect(tuned.pairs[0].femur).toBeLessThanOrEqual(120);
+    expect(tuned.pairs[0].stride).toBeGreaterThanOrEqual(0);
   });
 
   it("lets the query string win over localStorage", () => {
     expect(resolveSpiderTuning('{"restReach":0.9}', '{"restReach":0.4}').restReach).toBe(0.4);
+  });
+
+  it("creates and parses presets with normalized tuning", () => {
+    const preset = createSpiderPreset("  测试预设 ", { ...getSpiderTuning(), restReach: 0.42 });
+    expect(preset.name).toBe("测试预设");
+    const parsed = parseSpiderPresets(JSON.stringify([preset, { name: "x" }]));
+    expect(parsed).toHaveLength(2);
+    expect(parsed[0].tuning.restReach).toBeCloseTo(0.42, 5);
+    expect(parsed[1].tuning.pairs).toHaveLength(4);
+    expect(parseSpiderPresets("nope")).toEqual([]);
   });
 
   it("applies live tuning updates to the leg geometry and resets", () => {
@@ -266,5 +291,18 @@ describe("spider state machine", () => {
     expect(sawPartialSwing).toBe(true);
     expect(swung.size).toBe(8);
     expect(stable).toBe(true);
+  });
+
+  it("keeps every pair stepping through a fast turn (rear legs do not hang)", () => {
+    let state: SpiderState = { ...createSpiderState(viewport), status: "chase", x: 700, y: 450, heading: 0, chaseSince: 0 };
+    const pointer = { x: 700 - SPIDER_LENGTH * 6, y: 450 };
+    const swung = new Set<number>();
+    for (let frame = 0; frame < 120; frame += 1) {
+      state = stepSpider(state, { ...base, pointer, chaseCursor: true });
+      state.legs.forEach((leg, index) => {
+        if (!leg.planted) swung.add(index);
+      });
+    }
+    expect(swung.size).toBe(8);
   });
 });

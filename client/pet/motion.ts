@@ -123,8 +123,8 @@ export function strideTarget(
 ): Point {
   const speed = Math.hypot(vx, vy);
   if (speed < 1) return rest;
-  const stride = maxReach * getSpiderTuning().stride * legStrideFactor(leg) * (0.5 + Math.min(1.2, speed / 180));
-  return { x: rest.x + (vx / speed) * stride, y: rest.y + (vy / speed) * stride };
+  const forward = maxReach * getSpiderTuning().stride * legStrideFactor(leg) * (0.4 + Math.min(1, speed / 200));
+  return { x: rest.x + (vx / speed) * forward, y: rest.y + (vy / speed) * forward };
 }
 
 function stepLegs(
@@ -133,6 +133,7 @@ function stepLegs(
   dt: number,
   random: () => number,
   activityScale: number,
+  pivot: boolean,
 ): SpiderLegState[] {
   const moving = state.status === "wander" || state.status === "chase" || state.status === "evade";
   return SPIDER_LEGS.map((leg, index) => {
@@ -181,7 +182,7 @@ function stepLegs(
       const restAngle = Math.atan2(rest.y - hip.y, rest.x - hip.x);
       const angleError = Math.abs(normalizeAngle(footAngle - restAngle));
       const tuning = getSpiderTuning();
-      const shouldStep = (moving && (reach > maxReach * tuning.stepReach || angleError > tuning.stepAngle)) || tooFar;
+      const shouldStep = pivot || (moving && (reach > maxReach * tuning.stepReach || angleError > tuning.stepAngle)) || tooFar;
       if (shouldStep) {
         const stepTo = strideTarget(leg, rest, state.vx, state.vy, maxReach);
         return {
@@ -202,7 +203,7 @@ function stepLegs(
       };
     }
 
-    const swingDuration = 0.17 / Math.max(0.6, 0.5 + activityScale * 0.5);
+    const swingDuration = getSpiderTuning().swingDuration / Math.max(0.6, 0.5 + activityScale * 0.5);
     const swing = previous.swing + dt / swingDuration;
     if (swing >= 1) {
       return { ...previous, planted: true, swing: 0, footX: previous.stepToX, footY: previous.stepToY };
@@ -392,6 +393,8 @@ export function stepSpider(state: SpiderState, input: PetInput): SpiderState {
   x = clampedX;
   y = clampedY;
 
+  const pivot = Math.abs(normalizeAngle(heading - state.heading)) > getSpiderTuning().pivotAngle;
+
   const next: SpiderState = {
     status,
     x,
@@ -408,6 +411,6 @@ export function stepSpider(state: SpiderState, input: PetInput): SpiderState {
     webAnchor,
     legs: state.legs,
   };
-  next.legs = stepLegs(state.legs, next, dt, random, activityScale);
+  next.legs = stepLegs(state.legs, next, dt, random, activityScale, pivot);
   return next;
 }
