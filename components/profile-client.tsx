@@ -4,8 +4,8 @@
 import Link from "next/link";
 import { ChangeEvent, PointerEvent, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Crop, ImagePlus, LoaderCircle, Trash2, Upload, X } from "lucide-react";
-import { clampAvatarCropPosition, getAvatarCropScale, type AvatarCropPosition } from "@/lib/avatar-crop";
-import { getAvatarFileError } from "@/lib/user-avatar";
+import { clampAvatarCropPosition, getAvatarCropScale, type AvatarCropPosition } from "@/client/avatar-crop";
+import { getAvatarFileError } from "@/client/user-avatar";
 import { UserAvatar } from "@/components/user-avatar";
 
 type ProfileUser = { id: string; username: string; avatarUrl?: string | null };

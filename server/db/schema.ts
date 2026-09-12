@@ -12,7 +12,7 @@ import {
   varchar,
   bigint,
 } from "drizzle-orm/mysql-core";
-import type { MessagePart } from "@/lib/messages";
+import type { MessagePart } from "@/shared/messages";
 
 const timestamps = {
   createdAt: datetime("created_at", { mode: "date" }).notNull().default(sql`CURRENT_TIMESTAMP`),

@@ -2,10 +2,10 @@ import { createHash, randomBytes, randomUUID } from "crypto";
 import argon2 from "argon2";
 import { eq } from "drizzle-orm";
 import { cookies } from "next/headers";
-import { getDb } from "@/lib/db";
-import { companionRuntimeTokens, sessions, users } from "@/lib/db/schema";
-import { getSessionTtlDays } from "@/lib/config";
-import { avatarUrl } from "@/lib/avatar";
+import { getDb } from "@/server/db";
+import { companionRuntimeTokens, sessions, users } from "@/server/db/schema";
+import { getSessionTtlDays } from "@/server/config";
+import { avatarUrl } from "@/server/services/avatar";
 
 const SESSION_COOKIE = "ai_chater_session";
 

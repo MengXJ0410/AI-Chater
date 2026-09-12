@@ -1,7 +1,7 @@
 import nextEnv from "@next/env";
 import { createConnection } from "mysql2/promise";
 nextEnv.loadEnvConfig(process.cwd());
-const { processNextVideoGeneration, recoverInterruptedVideoGenerations } = await import("../lib/video-generation");
+const { processNextVideoGeneration, recoverInterruptedVideoGenerations } = await import("../server/services/video-generation");
 if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL 未配置。");
 const lock = await createConnection(process.env.DATABASE_URL);
 const [rows] = await lock.query("SELECT GET_LOCK('ai_chater_video_worker', 0) AS acquired");

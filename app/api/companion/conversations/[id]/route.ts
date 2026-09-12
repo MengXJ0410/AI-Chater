@@ -1,12 +1,12 @@
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { routeError } from "@/lib/api";
-import { requireCompanionRuntime } from "@/lib/companion-auth";
-import { companionOptions, withCompanionCors } from "@/lib/companion-http";
-import { getCompanionConversation } from "@/lib/companion";
-import { getDb } from "@/lib/db";
-import { messages } from "@/lib/db/schema";
-import { RequestError } from "@/lib/http";
+import { routeError } from "@/server/http/route-error";
+import { requireCompanionRuntime } from "@/server/security/companion-auth";
+import { companionOptions, withCompanionCors } from "@/server/http/companion-http";
+import { getCompanionConversation } from "@/server/services/companion";
+import { getDb } from "@/server/db";
+import { messages } from "@/server/db/schema";
+import { RequestError } from "@/server/http/errors";
 
 export const runtime = "nodejs";
 

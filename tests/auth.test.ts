@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { createTombstoneUsername, isDuplicateEntryError } from "@/lib/account";
-import { hashPassword, verifyPassword } from "@/lib/auth";
-import { deleteAccountSchema, normalizeUsername, passwordChangeSchema } from "@/lib/validators";
+import { createTombstoneUsername, isDuplicateEntryError } from "@/server/security/account";
+import { hashPassword, verifyPassword } from "@/server/security/auth";
+import { deleteAccountSchema, normalizeUsername, passwordChangeSchema } from "@/shared/validators";
 
 describe("account lifecycle helpers", () => {
   it("normalizes usernames without changing the public validation rules", () => {

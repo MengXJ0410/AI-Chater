@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { requireUser } from "@/lib/auth";
-import { routeError } from "@/lib/api";
-import { getPublicAiPresets } from "@/lib/config";
-import { listModelConfigs } from "@/lib/model-configs";
+import { requireUser } from "@/server/security/auth";
+import { routeError } from "@/server/http/route-error";
+import { getPublicAiPresets } from "@/server/config";
+import { listModelConfigs } from "@/server/services/model-configs";
 
 export async function GET() {
   try {

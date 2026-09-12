@@ -1,16 +1,16 @@
 import { createHash, randomUUID } from "crypto";
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
-import { generateConfiguredImage, logImageError } from "@/lib/ai-image";
-import { isDuplicateEntryError } from "@/lib/account";
-import { getDb } from "@/lib/db";
-import { attachments, conversations, imageGenerations, messages, userImageConfigs, users } from "@/lib/db/schema";
-import { resolveStoredImageConnection, rotatedImageCredentials } from "@/lib/image-config";
-import { LEGACY_IMAGE_RUNTIME_ID } from "@/lib/model-configs";
-import { auditModelConfig, consumeRateLimitInTransaction } from "@/lib/model-controls";
-import { RequestError } from "@/lib/http";
-import { removeImages, saveGeneratedPng } from "@/lib/uploads";
+import { generateConfiguredImage, logImageError } from "@/server/providers/ai-image";
+import { isDuplicateEntryError } from "@/server/security/account";
+import { getDb } from "@/server/db";
+import { attachments, conversations, imageGenerations, messages, userImageConfigs, users } from "@/server/db/schema";
+import { resolveStoredImageConnection, rotatedImageCredentials } from "@/server/services/image-config";
+import { LEGACY_IMAGE_RUNTIME_ID } from "@/server/services/model-configs";
+import { auditModelConfig, consumeRateLimitInTransaction } from "@/server/services/model-controls";
+import { RequestError } from "@/server/http/errors";
+import { removeImages, saveGeneratedPng } from "@/server/services/uploads";
 import type { z } from "zod";
-import type { imageGenerationSchema } from "@/lib/validators";
+import type { imageGenerationSchema } from "@/shared/validators";
 
 type GenerationInput = z.infer<typeof imageGenerationSchema>;
 

@@ -1,6 +1,6 @@
 import { HomeHero } from "@/components/home-hero";
-import { getCurrentUser } from "@/lib/auth";
-import { getHomeBackgrounds } from "@/lib/home-backgrounds";
+import { getCurrentUser } from "@/server/security/auth";
+import { getHomeBackgrounds } from "@/server/services/home-backgrounds";
 
 export const dynamic = "force-dynamic";
 

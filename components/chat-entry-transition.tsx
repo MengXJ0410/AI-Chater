@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CHAT_ENTRY_READY_EVENT, CHAT_ENTRY_REQUEST_EVENT, CHAT_ENTRY_STORAGE_KEY } from "@/lib/chat-entry-transition";
+import { CHAT_ENTRY_READY_EVENT, CHAT_ENTRY_REQUEST_EVENT, CHAT_ENTRY_STORAGE_KEY } from "@/client/chat-entry-transition";
 
 type TransitionPhase = "idle" | "covering" | "revealing";
 

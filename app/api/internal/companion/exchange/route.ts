@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { exchangeCompanionLaunch } from "@/lib/companion-auth";
-import { routeError } from "@/lib/api";
-import { companionOptions, withCompanionCors } from "@/lib/companion-http";
-import { companionExchangeSchema } from "@/lib/validators";
+import { exchangeCompanionLaunch } from "@/server/security/companion-auth";
+import { routeError } from "@/server/http/route-error";
+import { companionOptions, withCompanionCors } from "@/server/http/companion-http";
+import { companionExchangeSchema } from "@/shared/validators";
 
 export const runtime = "nodejs";
 

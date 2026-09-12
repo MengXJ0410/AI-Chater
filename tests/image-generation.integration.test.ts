@@ -5,7 +5,7 @@ import path from "path";
 import { and, eq, inArray } from "drizzle-orm";
 import sharp from "sharp";
 import { describe, expect, it, vi } from "vitest";
-import { hashPassword } from "@/lib/auth";
+import { hashPassword } from "@/server/security/auth";
 
 const integration = process.env.AUTH_TEST_DATABASE_URL ? it : it.skip;
 
@@ -28,11 +28,11 @@ describe("MySQL image generation (optional integration)", () => {
     process.env.UPLOAD_DIR = uploadDirectory;
 
     const [{ getDb }, schema, imageConfig, generation, uploads] = await Promise.all([
-      import("@/lib/db"),
-      import("@/lib/db/schema"),
-      import("@/lib/image-config"),
-      import("@/lib/image-generation"),
-      import("@/lib/uploads"),
+      import("@/server/db"),
+      import("@/server/db/schema"),
+      import("@/server/services/image-config"),
+      import("@/server/services/image-generation"),
+      import("@/server/services/uploads"),
     ]);
     const db = getDb();
     const userA = { id: randomUUID(), username: `image_a_${randomUUID().slice(0, 8)}`, passwordHash: await hashPassword("password123") };

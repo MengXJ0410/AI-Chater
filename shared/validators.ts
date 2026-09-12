@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { aiProviderSchema } from "@/lib/config";
+import { aiProviderSchema } from "@/shared/config";
 
 const passwordSchema = z.string().min(8, "密码至少需要 8 位。").max(128, "密码不能超过 128 位。");
 

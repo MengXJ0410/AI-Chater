@@ -5,10 +5,11 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createXai } from "@ai-sdk/xai";
 import { generateText } from "ai";
 import type { LanguageModel, ModelMessage } from "ai";
-import { getAiPresets, type AiPreset, type AiProvider } from "@/lib/config";
-import { readImage } from "@/lib/uploads";
-import type { MessagePart } from "@/lib/messages";
-import { assertSafeResolvedRequestUrl } from "@/lib/user-ai-config";
+import { getAiPresets, type AiPreset } from "@/server/config";
+import type { AiProvider } from "@/shared/config";
+import { readImage } from "@/server/services/uploads";
+import type { MessagePart } from "@/shared/messages";
+import { assertSafeResolvedRequestUrl } from "@/server/services/user-ai-config";
 
 export function getPreset(id: string) {
   return getAiPresets().find((preset) => preset.id === id);

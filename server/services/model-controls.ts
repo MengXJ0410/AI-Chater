@@ -1,8 +1,8 @@
 import { randomUUID } from "crypto";
 import { and, eq, lt, sql } from "drizzle-orm";
-import { getDb } from "@/lib/db";
-import { modelConfigAuditEvents, rateLimitStates } from "@/lib/db/schema";
-import { RequestError } from "@/lib/http";
+import { getDb } from "@/server/db";
+import { modelConfigAuditEvents, rateLimitStates } from "@/server/db/schema";
+import { RequestError } from "@/server/http/errors";
 
 export type RateLimitScope = "config_mutation" | "chat_test" | "image_test" | "image_generation";
 export type AuditKind = "chat" | "image";

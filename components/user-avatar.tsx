@@ -2,7 +2,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useState } from "react";
-import { getAvatarInitial } from "@/lib/user-avatar";
+import { getAvatarInitial } from "@/client/user-avatar";
 
 type UserAvatarProps = {
   username: string;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { clampAvatarCropPosition, getAvatarCropScale } from "@/lib/avatar-crop";
-import { AVATAR_MAX_BYTES, getAvatarFileError, getAvatarInitial } from "@/lib/user-avatar";
+import { clampAvatarCropPosition, getAvatarCropScale } from "@/client/avatar-crop";
+import { AVATAR_MAX_BYTES, getAvatarFileError, getAvatarInitial } from "@/client/user-avatar";
 
 describe("user avatar helpers", () => {
   it("uses the username initial when an avatar is unavailable", () => {

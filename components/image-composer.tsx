@@ -2,7 +2,7 @@
 
 import { ChangeEvent, useRef } from "react";
 import { LoaderCircle, Paperclip, SendHorizontal, Square, X } from "lucide-react";
-import type { ImageCapabilities, ImageGenerationDraft, ImagePreset } from "@/lib/image-generation-client";
+import type { ImageCapabilities, ImageGenerationDraft, ImagePreset } from "@/client/image/generation-client";
 
 type ReferenceImage = { id: string; originalName: string };
 

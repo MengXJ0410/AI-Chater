@@ -1,11 +1,11 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { clearSessionCookie, hashPassword, requireUser, verifyPassword } from "@/lib/auth";
-import { routeError } from "@/lib/api";
-import { getDb } from "@/lib/db";
-import { sessions, userAiConfigs, users } from "@/lib/db/schema";
-import { assertSameOrigin, errorResponse } from "@/lib/http";
-import { passwordChangeSchema } from "@/lib/validators";
+import { clearSessionCookie, hashPassword, requireUser, verifyPassword } from "@/server/security/auth";
+import { routeError } from "@/server/http/route-error";
+import { getDb } from "@/server/db";
+import { sessions, userAiConfigs, users } from "@/server/db/schema";
+import { assertSameOrigin, errorResponse } from "@/server/http/errors";
+import { passwordChangeSchema } from "@/shared/validators";
 
 export async function PATCH(request: Request) {
   try {

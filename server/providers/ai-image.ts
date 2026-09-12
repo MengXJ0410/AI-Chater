@@ -1,8 +1,8 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createXai } from "@ai-sdk/xai";
 import { generateImage } from "ai";
-import { assertSafeResolvedRequestUrl } from "@/lib/user-ai-config";
-import type { ImageConnection } from "@/lib/image-config";
+import { assertSafeResolvedRequestUrl } from "@/server/services/user-ai-config";
+import type { ImageConnection } from "@/server/services/image-config";
 
 const MAX_PROVIDER_IMAGE_BYTES = 20 * 1024 * 1024;
 

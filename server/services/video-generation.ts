@@ -1,14 +1,14 @@
 import { createHash, randomUUID } from "crypto";
 import { and, asc, eq, inArray } from "drizzle-orm";
-import { getDb } from "@/lib/db";
-import { attachments, conversations, messages, videoGenerations } from "@/lib/db/schema";
-import { RequestError } from "@/lib/http";
-import { resolveVideoConfig } from "@/lib/video-config";
-import { rewriteVideoPrompt } from "@/lib/minimax-h3";
-import { submitComfy, waitComfy } from "@/lib/comfyui";
-import { removeImages } from "@/lib/uploads";
+import { getDb } from "@/server/db";
+import { attachments, conversations, messages, videoGenerations } from "@/server/db/schema";
+import { RequestError } from "@/server/http/errors";
+import { resolveVideoConfig } from "@/server/services/video-config";
+import { rewriteVideoPrompt } from "@/server/providers/minimax-h3";
+import { submitComfy, waitComfy } from "@/server/providers/comfyui";
+import { removeImages } from "@/server/services/uploads";
 import type { z } from "zod";
-import type { videoGenerationSchema } from "@/lib/validators";
+import type { videoGenerationSchema } from "@/shared/validators";
 type Input = z.infer<typeof videoGenerationSchema>;
 const hashInput = (input: Input) => createHash("sha256").update(JSON.stringify(input)).digest("hex");
 function publicGeneration(row: typeof videoGenerations.$inferSelect, files: Array<typeof attachments.$inferSelect> = []) { return { id: row.id, requestId: row.requestId, status: row.status, mode: row.mode, model: row.model, prompt: row.prompt, rewrittenPrompt: row.rewrittenPrompt, negativePrompt: row.negativePrompt, shotPlan: row.shotPlan, width: row.width, height: row.height, frames: row.frames, fps: row.fps, steps: row.steps, errorCode: row.errorCode, createdAt: row.createdAt, startedAt: row.startedAt, completedAt: row.completedAt, attachments: files.map((file) => ({ id: file.id, url: `/api/attachments/${file.id}`, mimeType: file.mimeType, size: file.size })) }; }

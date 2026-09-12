@@ -1,12 +1,12 @@
 import { randomUUID } from "crypto";
 import { and, desc, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { requireUser } from "@/lib/auth";
-import { routeError } from "@/lib/api";
-import { getDb } from "@/lib/db";
-import { conversations } from "@/lib/db/schema";
-import { assertSameOrigin } from "@/lib/http";
-import { conversationSchema } from "@/lib/validators";
+import { requireUser } from "@/server/security/auth";
+import { routeError } from "@/server/http/route-error";
+import { getDb } from "@/server/db";
+import { conversations } from "@/server/db/schema";
+import { assertSameOrigin } from "@/server/http/errors";
+import { conversationSchema } from "@/shared/validators";
 
 export async function GET() {
   try {

@@ -1,13 +1,13 @@
 import { randomUUID } from "crypto";
 import { and, desc, eq } from "drizzle-orm";
-import { getDb } from "@/lib/db";
-import { imageGenerations, userAiConfigs, userImageConfigs } from "@/lib/db/schema";
-import { auditModelConfig } from "@/lib/model-controls";
-import { RequestError } from "@/lib/http";
-import { getActiveEncryptionKeyId, decryptApiKey, encryptApiKey, resolveUserAiInput, validateUserAiConfig, type UserAiConfigInput, type UserAiModelConfig } from "@/lib/user-ai-config";
-import { imageCapabilities, resolveStoredImageConnection, rotatedImageCredentials, validateImageConnection, type ImageConnection, type ImageProvider } from "@/lib/image-config";
+import { getDb } from "@/server/db";
+import { imageGenerations, userAiConfigs, userImageConfigs } from "@/server/db/schema";
+import { auditModelConfig } from "@/server/services/model-controls";
+import { RequestError } from "@/server/http/errors";
+import { getActiveEncryptionKeyId, decryptApiKey, encryptApiKey, resolveUserAiInput, validateUserAiConfig, type UserAiConfigInput, type UserAiModelConfig } from "@/server/services/user-ai-config";
+import { imageCapabilities, resolveStoredImageConnection, rotatedImageCredentials, validateImageConnection, type ImageConnection, type ImageProvider } from "@/server/services/image-config";
 import type { z } from "zod";
-import type { modelConfigCreateSchema, modelConfigUpdateSchema } from "@/lib/validators";
+import type { modelConfigCreateSchema, modelConfigUpdateSchema } from "@/shared/validators";
 
 type ModelConfigInput = z.infer<typeof modelConfigCreateSchema> | z.infer<typeof modelConfigUpdateSchema>;
 export type PublicModelConfig = {

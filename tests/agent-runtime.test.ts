@@ -20,7 +20,7 @@ import {
   type AgentExecutionEvent,
   type AgentRunOptions,
   type AgentToolDefinition,
-} from "@/lib/agent";
+} from "@/server/agent";
 
 const modelUsage = {
   inputTokens: {

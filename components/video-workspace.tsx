@@ -1,8 +1,8 @@
 "use client";
 import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { Download, LoaderCircle, Paperclip, SendHorizontal, Square, X } from "lucide-react";
-import type { VideoGeneration, VideoMode } from "@/lib/video-generation-client";
-import { videoErrorMessage } from "@/lib/video-generation-client";
+import type { VideoGeneration, VideoMode } from "@/client/video/generation-client";
+import { videoErrorMessage } from "@/client/video/generation-client";
 type Ref = { id: string; originalName: string };
 export function VideoWorkspace({ conversationId, ensureConversation, onOpenConfig }: { conversationId: string | null; ensureConversation: () => Promise<string>; onOpenConfig: () => void }) {
   const [mode, setMode] = useState<VideoMode>("text-to-video"); const [prompt, setPrompt] = useState(""); const [refs, setRefs] = useState<Ref[]>([]); const [generation, setGeneration] = useState<VideoGeneration | null>(null); const [error, setError] = useState(""); const [uploading, setUploading] = useState(false); const inputRef = useRef<HTMLInputElement>(null); const pollRef = useRef<number | null>(null);

@@ -1,8 +1,8 @@
-import { requireCompanionRuntime } from "@/lib/companion-auth";
-import { generateCompanionReply } from "@/lib/companion";
-import { routeError } from "@/lib/api";
-import { companionOptions, withCompanionCors } from "@/lib/companion-http";
-import { companionGenerateSchema } from "@/lib/validators";
+import { requireCompanionRuntime } from "@/server/security/companion-auth";
+import { generateCompanionReply } from "@/server/services/companion";
+import { routeError } from "@/server/http/route-error";
+import { companionOptions, withCompanionCors } from "@/server/http/companion-http";
+import { companionGenerateSchema } from "@/shared/validators";
 
 export const runtime = "nodejs";
 

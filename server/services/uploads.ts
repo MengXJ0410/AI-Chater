@@ -2,8 +2,8 @@ import { randomUUID } from "crypto";
 import { mkdir, readFile, rm, writeFile } from "fs/promises";
 import path from "path";
 import sharp from "sharp";
-import { getMaxUploadBytes, getUploadDirectory } from "@/lib/config";
-import { RequestError } from "@/lib/http";
+import { getMaxUploadBytes, getUploadDirectory } from "@/server/config";
+import { RequestError } from "@/server/http/errors";
 
 const supportedTypes: Record<string, string> = {
   "image/jpeg": "jpg",

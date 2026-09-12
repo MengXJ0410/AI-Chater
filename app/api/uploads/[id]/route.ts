@@ -1,11 +1,11 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { requireUser } from "@/lib/auth";
-import { routeError } from "@/lib/api";
-import { getDb } from "@/lib/db";
-import { attachments } from "@/lib/db/schema";
-import { assertSameOrigin, errorResponse } from "@/lib/http";
-import { removeImages } from "@/lib/uploads";
+import { requireUser } from "@/server/security/auth";
+import { routeError } from "@/server/http/route-error";
+import { getDb } from "@/server/db";
+import { attachments } from "@/server/db/schema";
+import { assertSameOrigin, errorResponse } from "@/server/http/errors";
+import { removeImages } from "@/server/services/uploads";
 
 export const runtime = "nodejs";
 

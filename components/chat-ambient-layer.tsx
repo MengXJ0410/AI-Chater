@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { canTrackChatPointer, clampPointerPoint, getPointerStrength, interpolatePointerPoint } from "@/lib/chat-ambient";
+import { canTrackChatPointer, clampPointerPoint, getPointerStrength, interpolatePointerPoint } from "@/client/chat-ambient";
 
 export function ChatAmbientLayer() {
   const layerRef = useRef<HTMLDivElement>(null);

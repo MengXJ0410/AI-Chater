@@ -1,10 +1,10 @@
 import { randomUUID } from "crypto";
 import { desc, eq } from "drizzle-orm";
-import { getDb } from "@/lib/db";
-import { userVideoConfigs } from "@/lib/db/schema";
-import { RequestError } from "@/lib/http";
+import { getDb } from "@/server/db";
+import { userVideoConfigs } from "@/server/db/schema";
+import { RequestError } from "@/server/http/errors";
 import type { z } from "zod";
-import type { videoConfigSchema } from "@/lib/validators";
+import type { videoConfigSchema } from "@/shared/validators";
 
 export type VideoConfigInput = z.infer<typeof videoConfigSchema>;
 export type VideoConnection = VideoConfigInput & { id: string };

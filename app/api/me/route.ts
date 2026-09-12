@@ -1,13 +1,13 @@
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { createTombstoneUsername } from "@/lib/account";
-import { clearSessionCookie, getCurrentUser, requireUser, verifyPassword } from "@/lib/auth";
-import { routeError } from "@/lib/api";
-import { getDb } from "@/lib/db";
-import { imageGenerations, sessions, userAiConfigs, userImageConfigs, users } from "@/lib/db/schema";
-import { assertSameOrigin, errorResponse } from "@/lib/http";
-import { deleteAccountSchema } from "@/lib/validators";
-import { removeAvatar } from "@/lib/avatar";
+import { createTombstoneUsername } from "@/server/security/account";
+import { clearSessionCookie, getCurrentUser, requireUser, verifyPassword } from "@/server/security/auth";
+import { routeError } from "@/server/http/route-error";
+import { getDb } from "@/server/db";
+import { imageGenerations, sessions, userAiConfigs, userImageConfigs, users } from "@/server/db/schema";
+import { assertSameOrigin, errorResponse } from "@/server/http/errors";
+import { deleteAccountSchema } from "@/shared/validators";
+import { removeAvatar } from "@/server/services/avatar";
 
 export async function GET() {
   try {

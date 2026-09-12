@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { requireCompanionRuntime } from "@/lib/companion-auth";
-import { createCompanionConversation, listCompanionConversations } from "@/lib/companion";
-import { routeError } from "@/lib/api";
-import { companionOptions, withCompanionCors } from "@/lib/companion-http";
-import { companionConversationSchema } from "@/lib/validators";
+import { requireCompanionRuntime } from "@/server/security/companion-auth";
+import { createCompanionConversation, listCompanionConversations } from "@/server/services/companion";
+import { routeError } from "@/server/http/route-error";
+import { companionOptions, withCompanionCors } from "@/server/http/companion-http";
+import { companionConversationSchema } from "@/shared/validators";
 
 export const runtime = "nodejs";
 

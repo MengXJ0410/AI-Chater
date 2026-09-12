@@ -1,11 +1,11 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { avatarUrl, normalizeAvatar, readAvatar, removeAvatar, saveAvatar } from "@/lib/avatar";
-import { requireUser } from "@/lib/auth";
-import { routeError } from "@/lib/api";
-import { getDb } from "@/lib/db";
-import { users } from "@/lib/db/schema";
-import { assertSameOrigin, errorResponse } from "@/lib/http";
+import { avatarUrl, normalizeAvatar, readAvatar, removeAvatar, saveAvatar } from "@/server/services/avatar";
+import { requireUser } from "@/server/security/auth";
+import { routeError } from "@/server/http/route-error";
+import { getDb } from "@/server/db";
+import { users } from "@/server/db/schema";
+import { assertSameOrigin, errorResponse } from "@/server/http/errors";
 
 export const runtime = "nodejs";
 

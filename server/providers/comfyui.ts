@@ -1,10 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { readFile } from "fs/promises";
 import path from "path";
-import { RequestError } from "@/lib/http";
-import { saveGeneratedVideo } from "@/lib/uploads";
-import type { VideoConnection } from "@/lib/video-config";
-import type { VideoMode } from "@/lib/video-generation-client";
+import { RequestError } from "@/server/http/errors";
+import { saveGeneratedVideo } from "@/server/services/uploads";
+import type { VideoConnection } from "@/server/services/video-config";
+import type { VideoMode } from "@/client/video/generation-client";
 
 const headers = (config: VideoConnection) => ({ "Content-Type": "application/json", ...(config.comfyToken ? { Authorization: `Bearer ${config.comfyToken}` } : {}) });
 export async function testComfy(config: Pick<VideoConnection, "comfyBaseUrl" | "comfyToken">) { const response = await fetch(`${config.comfyBaseUrl}/system_stats`, { headers: headers(config as VideoConnection), signal: AbortSignal.timeout(10000) }); if (!response.ok) throw new RequestError("ComfyUI 服务不可用。", 502); return response.json(); }

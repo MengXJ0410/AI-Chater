@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createLegacyWorkspaceConfigs, filterWorkspaceConfigs, formatMaskedApiKey, isWorkspaceConfigFallbackStatus, normalizeSavedWorkspaceConfigs } from "@/lib/workspace-configs";
+import { createLegacyWorkspaceConfigs, filterWorkspaceConfigs, formatMaskedApiKey, isWorkspaceConfigFallbackStatus, normalizeSavedWorkspaceConfigs } from "@/client/workspace-configs";
 
 describe("workspace configuration adapters", () => {
   it("converts current single chat and image configs into a unified list", () => {

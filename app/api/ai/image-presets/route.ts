@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { routeError } from "@/lib/api";
-import { requireUser } from "@/lib/auth";
-import { imagePreset, listModelConfigs } from "@/lib/model-configs";
+import { routeError } from "@/server/http/route-error";
+import { requireUser } from "@/server/security/auth";
+import { imagePreset, listModelConfigs } from "@/server/services/model-configs";
 
 export async function GET() {
   try {

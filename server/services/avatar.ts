@@ -2,8 +2,8 @@ import { randomUUID } from "crypto";
 import { mkdir, readFile, rm, writeFile } from "fs/promises";
 import path from "path";
 import sharp, { type Metadata } from "sharp";
-import { uploadPath } from "@/lib/uploads";
-import { RequestError } from "@/lib/http";
+import { uploadPath } from "@/server/services/uploads";
+import { RequestError } from "@/server/http/errors";
 
 export const AVATAR_WIDTH = 512;
 export const AVATAR_HEIGHT = 512;

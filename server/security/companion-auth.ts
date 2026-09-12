@@ -1,9 +1,9 @@
 import { createHash, randomBytes, randomUUID } from "crypto";
 import { and, eq, gt, isNull } from "drizzle-orm";
-import { getCurrentSession } from "@/lib/auth";
-import { getDb } from "@/lib/db";
-import { companionLaunchTickets, companionRuntimeTokens, sessions } from "@/lib/db/schema";
-import { RequestError } from "@/lib/http";
+import { getCurrentSession } from "@/server/security/auth";
+import { getDb } from "@/server/db";
+import { companionLaunchTickets, companionRuntimeTokens, sessions } from "@/server/db/schema";
+import { RequestError } from "@/server/http/errors";
 
 const LAUNCH_TICKET_TTL_MS = 2 * 60 * 1000;
 const RUNTIME_TOKEN_TTL_MS = 10 * 60 * 1000;

@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { requireUser } from "@/lib/auth";
-import { routeError } from "@/lib/api";
-import { assertSameOrigin } from "@/lib/http";
-import { deleteUserAiConfig, getPublicUserAiConfig, getPublicUserAiConnectionPresets, saveUserAiConfig } from "@/lib/user-ai-config";
-import { userAiConfigSchema } from "@/lib/validators";
+import { requireUser } from "@/server/security/auth";
+import { routeError } from "@/server/http/route-error";
+import { assertSameOrigin } from "@/server/http/errors";
+import { deleteUserAiConfig, getPublicUserAiConfig, getPublicUserAiConnectionPresets, saveUserAiConfig } from "@/server/services/user-ai-config";
+import { userAiConfigSchema } from "@/shared/validators";
 
 export const runtime = "nodejs";
 

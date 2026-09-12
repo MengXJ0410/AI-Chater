@@ -1,6 +1,6 @@
 import { ZodError } from "zod";
-import { UnauthorizedError } from "@/lib/auth";
-import { errorResponse, RequestError } from "@/lib/http";
+import { UnauthorizedError } from "@/server/security/auth";
+import { errorResponse, RequestError } from "@/server/http/errors";
 
 export function routeError(error: unknown) {
   if (error instanceof UnauthorizedError) return errorResponse(error.message, 401);

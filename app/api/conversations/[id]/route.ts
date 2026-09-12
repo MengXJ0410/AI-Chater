@@ -1,12 +1,12 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { requireUser } from "@/lib/auth";
-import { routeError } from "@/lib/api";
-import { getDb } from "@/lib/db";
-import { attachments, conversations, messages } from "@/lib/db/schema";
-import { assertSameOrigin, errorResponse } from "@/lib/http";
-import { renameConversationSchema } from "@/lib/validators";
-import { removeImages } from "@/lib/uploads";
+import { requireUser } from "@/server/security/auth";
+import { routeError } from "@/server/http/route-error";
+import { getDb } from "@/server/db";
+import { attachments, conversations, messages } from "@/server/db/schema";
+import { assertSameOrigin, errorResponse } from "@/server/http/errors";
+import { renameConversationSchema } from "@/shared/validators";
+import { removeImages } from "@/server/services/uploads";
 
 async function getConversation(id: string, userId: string) {
   const item = await getDb().select().from(conversations)

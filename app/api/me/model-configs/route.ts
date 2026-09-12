@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { routeError } from "@/lib/api";
-import { requireUser } from "@/lib/auth";
-import { assertSameOrigin } from "@/lib/http";
-import { auditModelConfig, consumeRateLimit } from "@/lib/model-controls";
-import { createModelConfig, listModelConfigs } from "@/lib/model-configs";
-import { modelConfigCreateSchema } from "@/lib/validators";
+import { routeError } from "@/server/http/route-error";
+import { requireUser } from "@/server/security/auth";
+import { assertSameOrigin } from "@/server/http/errors";
+import { auditModelConfig, consumeRateLimit } from "@/server/services/model-controls";
+import { createModelConfig, listModelConfigs } from "@/server/services/model-configs";
+import { modelConfigCreateSchema } from "@/shared/validators";
 
 export const runtime = "nodejs";
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { appendStreamText, getGenerationLabel, getMessageSide } from "@/lib/chat-message";
-import { textFromParts } from "@/lib/messages";
+import { appendStreamText, getGenerationLabel, getMessageSide } from "@/client/chat-message";
+import { textFromParts } from "@/shared/messages";
 
 describe("chat message presentation", () => {
   it("keeps users on the right and assistants on the left", () => {

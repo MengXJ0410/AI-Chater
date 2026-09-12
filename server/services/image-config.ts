@@ -1,11 +1,11 @@
 import { randomUUID } from "crypto";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
-import { getDb } from "@/lib/db";
-import { imageGenerations, userImageConfigs, users } from "@/lib/db/schema";
-import { RequestError } from "@/lib/http";
-import { decryptApiKey, encryptApiKey, getActiveEncryptionKeyId, normalizeBaseUrl } from "@/lib/user-ai-config";
+import { getDb } from "@/server/db";
+import { imageGenerations, userImageConfigs, users } from "@/server/db/schema";
+import { RequestError } from "@/server/http/errors";
+import { decryptApiKey, encryptApiKey, getActiveEncryptionKeyId, normalizeBaseUrl } from "@/server/services/user-ai-config";
 import type { z } from "zod";
-import type { imageConfigSchema } from "@/lib/validators";
+import type { imageConfigSchema } from "@/shared/validators";
 
 export const USER_IMAGE_PRESET_ID = "user-image-config";
 export const IMAGE_ASPECT_RATIOS = ["1:1", "3:2", "2:3", "4:3", "3:4", "4:5", "5:4", "16:9", "9:16", "2:1", "1:2"] as const;

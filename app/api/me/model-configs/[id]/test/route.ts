@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { routeError } from "@/lib/api";
-import { logImageError, generateConfiguredImage } from "@/lib/ai-image";
-import { logModelError, testModelConnection } from "@/lib/ai";
-import { requireUser } from "@/lib/auth";
-import { assertSameOrigin, errorResponse, RequestError } from "@/lib/http";
-import { consumeRateLimit, auditModelConfig } from "@/lib/model-controls";
-import { chatConnectionForPreset, imageConnectionForPreset } from "@/lib/model-configs";
-import { removeImages, saveGeneratedPng } from "@/lib/uploads";
+import { routeError } from "@/server/http/route-error";
+import { logImageError, generateConfiguredImage } from "@/server/providers/ai-image";
+import { logModelError, testModelConnection } from "@/server/providers/ai";
+import { requireUser } from "@/server/security/auth";
+import { assertSameOrigin, errorResponse, RequestError } from "@/server/http/errors";
+import { consumeRateLimit, auditModelConfig } from "@/server/services/model-controls";
+import { chatConnectionForPreset, imageConnectionForPreset } from "@/server/services/model-configs";
+import { removeImages, saveGeneratedPng } from "@/server/services/uploads";
 
 export const runtime = "nodejs";
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {

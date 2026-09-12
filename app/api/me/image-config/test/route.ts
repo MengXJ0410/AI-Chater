@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
-import { generateConfiguredImage, logImageError } from "@/lib/ai-image";
-import { routeError } from "@/lib/api";
-import { requireUser, UnauthorizedError } from "@/lib/auth";
-import { resolveImageConnection } from "@/lib/image-config";
-import { assertSameOrigin, errorResponse, RequestError } from "@/lib/http";
-import { removeImages, saveGeneratedPng } from "@/lib/uploads";
-import { imageConfigSchema } from "@/lib/validators";
+import { generateConfiguredImage, logImageError } from "@/server/providers/ai-image";
+import { routeError } from "@/server/http/route-error";
+import { requireUser, UnauthorizedError } from "@/server/security/auth";
+import { resolveImageConnection } from "@/server/services/image-config";
+import { assertSameOrigin, errorResponse, RequestError } from "@/server/http/errors";
+import { removeImages, saveGeneratedPng } from "@/server/services/uploads";
+import { imageConfigSchema } from "@/shared/validators";
 
 export const runtime = "nodejs";
 

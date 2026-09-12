@@ -3,10 +3,10 @@ import { tmpdir } from "os";
 import path from "path";
 import sharp from "sharp";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { generateConfiguredImage, logImageError } from "@/lib/ai-image";
-import { imageCapabilities, validateImageConnection } from "@/lib/image-config";
-import { readImage, removeImages, saveGeneratedPng } from "@/lib/uploads";
-import { imageConfigSchema, imageGenerationSchema } from "@/lib/validators";
+import { generateConfiguredImage, logImageError } from "@/server/providers/ai-image";
+import { imageCapabilities, validateImageConnection } from "@/server/services/image-config";
+import { readImage, removeImages, saveGeneratedPng } from "@/server/services/uploads";
+import { imageConfigSchema, imageGenerationSchema } from "@/shared/validators";
 
 const originalAllowedUrls = process.env.USER_AI_ALLOWED_BASE_URLS;
 const originalAllowedOutputHosts = process.env.USER_IMAGE_ALLOWED_OUTPUT_HOSTS;

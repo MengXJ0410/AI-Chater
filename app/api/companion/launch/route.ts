@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { createCompanionLaunch } from "@/lib/companion-auth";
-import { routeError } from "@/lib/api";
-import { assertSameOrigin } from "@/lib/http";
+import { createCompanionLaunch } from "@/server/security/companion-auth";
+import { routeError } from "@/server/http/route-error";
+import { assertSameOrigin } from "@/server/http/errors";
 
 export const runtime = "nodejs";
 

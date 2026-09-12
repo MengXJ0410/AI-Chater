@@ -3,7 +3,7 @@ import os from "os";
 import path from "path";
 import sharp from "sharp";
 import { afterEach, describe, expect, it } from "vitest";
-import { avatarUrl, normalizeAvatar, readAvatar, removeAvatar, saveAvatar } from "@/lib/avatar";
+import { avatarUrl, normalizeAvatar, readAvatar, removeAvatar, saveAvatar } from "@/server/services/avatar";
 
 const originalUploadDir = process.env.UPLOAD_DIR;
 

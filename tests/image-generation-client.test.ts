@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getImageGenerationFailureMessage, getImageRequestError, normalizeImageCapabilities } from "@/lib/image-generation-client";
+import { getImageGenerationFailureMessage, getImageRequestError, normalizeImageCapabilities } from "@/client/image/generation-client";
 
 describe("image generation client", () => {
   it("normalizes server capabilities without inventing unsupported options", () => {

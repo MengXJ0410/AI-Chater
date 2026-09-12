@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { AI_TERMS, pickAiTerms } from "@/lib/ai-terms";
-import { isHomeBackgroundFile, toHomeBackgroundUrl } from "@/lib/home-backgrounds";
-import { HOME_AUTHOR_PROFILE } from "@/lib/home-profile";
-import { HOME_BRIGHT_STAR_COUNT, HOME_STAR_POINTS } from "@/lib/home-sky";
-import { clampHomePageIndex, getHomePageIndexFromScroll, nextHomePageIndex } from "@/lib/home-sections";
+import { AI_TERMS, pickAiTerms } from "@/client/home/ai-terms";
+import { isHomeBackgroundFile, toHomeBackgroundUrl } from "@/server/services/home-backgrounds";
+import { HOME_AUTHOR_PROFILE } from "@/client/home/home-profile";
+import { HOME_BRIGHT_STAR_COUNT, HOME_STAR_POINTS } from "@/client/home/home-sky";
+import { clampHomePageIndex, getHomePageIndexFromScroll, nextHomePageIndex } from "@/client/home/home-sections";
 
 describe("home background files", () => {
   it("accepts supported image extensions only", () => {

@@ -3,7 +3,7 @@
 
 import { Download, Eye, ImageIcon, LoaderCircle, RefreshCw, X } from "lucide-react";
 import { useState } from "react";
-import type { GeneratedImage } from "@/lib/image-generation-client";
+import type { GeneratedImage } from "@/client/image/generation-client";
 
 export function GeneratedImageGrid({ images, isGenerating, error, onRetry }: { images: GeneratedImage[]; isGenerating: boolean; error: string; onRetry: () => void }) {
   const [preview, setPreview] = useState<GeneratedImage | null>(null);

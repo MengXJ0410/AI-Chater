@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_ACCENT, darkerColor, defaultAppearance, deriveAccentTheme, deriveBubbleColor, getAppearancePanelVisibility, getBackgroundStrength, getChatFontLabel, getChatFontScale, parseAppearance, resolveAppearanceMode } from "@/lib/appearance";
-import { CHAT_ENTRY_TOKEN_TTL_MS, createChatEntryToken, isPendingChatEntry, isPlainPrimaryClick } from "@/lib/chat-entry-transition";
+import { DEFAULT_ACCENT, darkerColor, defaultAppearance, deriveAccentTheme, deriveBubbleColor, getAppearancePanelVisibility, getBackgroundStrength, getChatFontLabel, getChatFontScale, parseAppearance, resolveAppearanceMode } from "@/client/appearance";
+import { CHAT_ENTRY_TOKEN_TTL_MS, createChatEntryToken, isPendingChatEntry, isPlainPrimaryClick } from "@/client/chat-entry-transition";
 
 describe("appearance preferences", () => {
   it("uses defaults for missing or invalid saved data", () => {

@@ -1,7 +1,7 @@
 "use client";
 
 import { FileImage, MessageSquare, Pencil, Play, Trash2 } from "lucide-react";
-import { filterWorkspaceConfigs, formatMaskedApiKey, type SavedWorkspaceConfig, type WorkspaceConfigFilter } from "@/lib/workspace-configs";
+import { filterWorkspaceConfigs, formatMaskedApiKey, type SavedWorkspaceConfig, type WorkspaceConfigFilter } from "@/client/workspace-configs";
 
 export function SavedConfigList({ configs, filter, isLegacyMode, isLoading, error, activeChatPresetId, activeImagePresetId, onFilterChange, onUse, onEdit, onDelete }: {
   configs: SavedWorkspaceConfig[];

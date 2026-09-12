@@ -1,14 +1,14 @@
 import { randomUUID } from "crypto";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { streamText } from "ai";
-import { connectionFromPreset, getLanguageModel, getPreset, modelStreamErrorHandler, toModelMessages } from "@/lib/ai";
-import { requireUser } from "@/lib/auth";
-import { routeError } from "@/lib/api";
-import { getDb } from "@/lib/db";
-import { attachments, conversations, messages } from "@/lib/db/schema";
-import { assertSameOrigin, errorResponse } from "@/lib/http";
-import { chatSchema } from "@/lib/validators";
-import { chatConnectionForPreset, LEGACY_CHAT_RUNTIME_ID } from "@/lib/model-configs";
+import { connectionFromPreset, getLanguageModel, getPreset, modelStreamErrorHandler, toModelMessages } from "@/server/providers/ai";
+import { requireUser } from "@/server/security/auth";
+import { routeError } from "@/server/http/route-error";
+import { getDb } from "@/server/db";
+import { attachments, conversations, messages } from "@/server/db/schema";
+import { assertSameOrigin, errorResponse } from "@/server/http/errors";
+import { chatSchema } from "@/shared/validators";
+import { chatConnectionForPreset, LEGACY_CHAT_RUNTIME_ID } from "@/server/services/model-configs";
 
 export const runtime = "nodejs";
 

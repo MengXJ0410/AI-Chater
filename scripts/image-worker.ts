@@ -3,8 +3,8 @@ import { createConnection } from "mysql2/promise";
 
 nextEnv.loadEnvConfig(process.cwd());
 
-const { processNextImageGeneration, recoverInterruptedImageGenerations } = await import("../lib/image-generation");
-const { cleanupModelAudit } = await import("../lib/model-controls");
+const { processNextImageGeneration, recoverInterruptedImageGenerations } = await import("../server/services/image-generation");
+const { cleanupModelAudit } = await import("../server/services/model-controls");
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL 未配置。");

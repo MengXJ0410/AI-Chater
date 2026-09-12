@@ -4,7 +4,7 @@ import { ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
 import { LoaderCircle } from "lucide-react";
 import { ImageComposer } from "@/components/image-composer";
 import { GeneratedImageGrid } from "@/components/generated-image-grid";
-import { getImageGenerationFailureMessage, getImageRequestError, imagesFromGeneration, normalizeImagePreset, type GeneratedImage, type ImageGenerationDraft, type ImageGenerationResponse, type ImagePreset } from "@/lib/image-generation-client";
+import { getImageGenerationFailureMessage, getImageRequestError, imagesFromGeneration, normalizeImagePreset, type GeneratedImage, type ImageGenerationDraft, type ImageGenerationResponse, type ImagePreset } from "@/client/image/generation-client";
 
 type ReferenceImage = { id: string; originalName: string };
 type AttachmentResponse = { attachment: ReferenceImage };

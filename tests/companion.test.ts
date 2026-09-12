@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { COMPANION_PERSONA_VERSION, COMPANION_SYSTEM_PROMPT } from "@/lib/companion";
-import { companionCorsHeaders } from "@/lib/companion-http";
-import { companionConversationSchema, companionExchangeSchema, companionGenerateSchema } from "@/lib/validators";
+import { COMPANION_PERSONA_VERSION, COMPANION_SYSTEM_PROMPT } from "@/server/services/companion";
+import { companionCorsHeaders } from "@/server/http/companion-http";
+import { companionConversationSchema, companionExchangeSchema, companionGenerateSchema } from "@/shared/validators";
 
 describe("Companion contracts", () => {
   it("requires a user-owned model config and conversation for generation", () => {

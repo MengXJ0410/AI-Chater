@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { and, eq, inArray } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { hashPassword } from "@/lib/auth";
+import { hashPassword } from "@/server/security/auth";
 
 const integration = process.env.AUTH_TEST_DATABASE_URL ? it : it.skip;
 
@@ -10,8 +10,8 @@ describe("MySQL user isolation (optional integration)", () => {
     const originalDatabaseUrl = process.env.DATABASE_URL;
     process.env.DATABASE_URL = process.env.AUTH_TEST_DATABASE_URL;
     const [{ getDb }, { attachments, conversations, sessions, users }] = await Promise.all([
-      import("@/lib/db"),
-      import("@/lib/db/schema"),
+      import("@/server/db"),
+      import("@/server/db/schema"),
     ]);
     const db = getDb();
     const userA = { id: randomUUID(), username: `isolation_a_${randomUUID().slice(0, 8)}`, passwordHash: await hashPassword("password123") };

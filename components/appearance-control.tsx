@@ -20,7 +20,7 @@ import {
   type AppearanceMode,
   type AppearancePreferences,
   resolveAppearanceMode,
-} from "@/lib/appearance";
+} from "@/client/appearance";
 
 const maxSourceBytes = 15 * 1024 * 1024;
 const maxStoredBytes = 2.5 * 1024 * 1024;

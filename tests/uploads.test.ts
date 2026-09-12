@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { validateImage } from "@/lib/uploads";
+import { validateImage } from "@/server/services/uploads";
 
 const originalLimit = process.env.MAX_UPLOAD_BYTES;
 

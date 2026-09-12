@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { routeError } from "@/lib/api";
-import { requireUser } from "@/lib/auth";
-import { enqueueImageGeneration } from "@/lib/image-generation";
-import { assertSameOrigin } from "@/lib/http";
-import { imageGenerationSchema } from "@/lib/validators";
-import { auditModelConfig } from "@/lib/model-controls";
+import { routeError } from "@/server/http/route-error";
+import { requireUser } from "@/server/security/auth";
+import { enqueueImageGeneration } from "@/server/services/image-generation";
+import { assertSameOrigin } from "@/server/http/errors";
+import { imageGenerationSchema } from "@/shared/validators";
+import { auditModelConfig } from "@/server/services/model-controls";
 
 export const runtime = "nodejs";
 

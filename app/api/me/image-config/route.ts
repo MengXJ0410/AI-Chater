@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { routeError } from "@/lib/api";
-import { requireUser } from "@/lib/auth";
-import { deleteImageConfig, getPublicImageConfig, imageCapabilities } from "@/lib/image-config";
-import { assertSameOrigin } from "@/lib/http";
-import { imageConfigSchema } from "@/lib/validators";
-import { saveImageConfig } from "@/lib/image-config";
+import { routeError } from "@/server/http/route-error";
+import { requireUser } from "@/server/security/auth";
+import { deleteImageConfig, getPublicImageConfig, imageCapabilities } from "@/server/services/image-config";
+import { assertSameOrigin } from "@/server/http/errors";
+import { imageConfigSchema } from "@/shared/validators";
+import { saveImageConfig } from "@/server/services/image-config";
 
 export const runtime = "nodejs";
 

@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { testModelConnection, logModelError } from "@/lib/ai";
-import { requireUser, UnauthorizedError } from "@/lib/auth";
-import { routeError } from "@/lib/api";
-import { assertSameOrigin, errorResponse, RequestError } from "@/lib/http";
-import { resolveUserAiModelConfig } from "@/lib/user-ai-config";
-import { userAiConfigSchema } from "@/lib/validators";
+import { testModelConnection, logModelError } from "@/server/providers/ai";
+import { requireUser, UnauthorizedError } from "@/server/security/auth";
+import { routeError } from "@/server/http/route-error";
+import { assertSameOrigin, errorResponse, RequestError } from "@/server/http/errors";
+import { resolveUserAiModelConfig } from "@/server/services/user-ai-config";
+import { userAiConfigSchema } from "@/shared/validators";
 import { ZodError } from "zod";
 
 export const runtime = "nodejs";

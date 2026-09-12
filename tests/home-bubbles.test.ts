@@ -8,7 +8,7 @@ import {
   placeBubbleParticles,
   resolveParticleCollision,
   type BubbleParticle,
-} from "@/lib/home-bubbles";
+} from "@/client/home/home-bubbles";
 
 function particle(overrides: Partial<BubbleParticle> = {}): BubbleParticle {
   return {

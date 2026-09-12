@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canTrackChatPointer, clampPointerPoint, getFollowScrollTop, getGlowStyleValues, getPointerStrength, interpolatePointerPoint, isNearScrollBottom } from "@/lib/chat-ambient";
+import { canTrackChatPointer, clampPointerPoint, getFollowScrollTop, getGlowStyleValues, getPointerStrength, interpolatePointerPoint, isNearScrollBottom } from "@/client/chat-ambient";
 
 describe("chat ambient pointer", () => {
   it("keeps pointer coordinates inside the workbench", () => {

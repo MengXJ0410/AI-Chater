@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { routeError } from "@/lib/api";
-import { requireUser } from "@/lib/auth";
-import { cancelImageGeneration, publicGeneration } from "@/lib/image-generation";
-import { assertSameOrigin, errorResponse } from "@/lib/http";
+import { routeError } from "@/server/http/route-error";
+import { requireUser } from "@/server/security/auth";
+import { cancelImageGeneration, publicGeneration } from "@/server/services/image-generation";
+import { assertSameOrigin, errorResponse } from "@/server/http/errors";
 
 export const runtime = "nodejs";
 

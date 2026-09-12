@@ -11,12 +11,12 @@ import { UserAvatar } from "@/components/user-avatar";
 import { ImageWorkspace } from "@/components/image-workspace";
 import { VideoWorkspace } from "@/components/video-workspace";
 import { SavedConfigList } from "@/components/saved-config-list";
-import { CHAT_BACKGROUND_CHANGE_EVENT, CHAT_BACKGROUND_STORAGE_KEY } from "@/lib/appearance";
-import { CHAT_ENTRY_READY_EVENT, CHAT_ENTRY_STORAGE_KEY, isPendingChatEntry } from "@/lib/chat-entry-transition";
-import { appendStreamText, getGenerationLabel, type GenerationStatus } from "@/lib/chat-message";
-import { getFollowScrollTop, isNearScrollBottom } from "@/lib/chat-ambient";
-import { createLegacyWorkspaceConfigs, isWorkspaceConfigFallbackStatus, normalizeSavedWorkspaceConfigs, type SavedWorkspaceConfig, type WorkspaceConfigFilter, type WorkspaceConfigMode } from "@/lib/workspace-configs";
-import type { MessagePart } from "@/lib/messages";
+import { CHAT_BACKGROUND_CHANGE_EVENT, CHAT_BACKGROUND_STORAGE_KEY } from "@/client/appearance";
+import { CHAT_ENTRY_READY_EVENT, CHAT_ENTRY_STORAGE_KEY, isPendingChatEntry } from "@/client/chat-entry-transition";
+import { appendStreamText, getGenerationLabel, type GenerationStatus } from "@/client/chat-message";
+import { getFollowScrollTop, isNearScrollBottom } from "@/client/chat-ambient";
+import { createLegacyWorkspaceConfigs, isWorkspaceConfigFallbackStatus, normalizeSavedWorkspaceConfigs, type SavedWorkspaceConfig, type WorkspaceConfigFilter, type WorkspaceConfigMode } from "@/client/workspace-configs";
+import type { MessagePart } from "@/shared/messages";
 
 type User = { id: string; username: string; avatarUrl?: string | null };
 type Conversation = { id: string; title: string; createdAt: string; updatedAt: string };

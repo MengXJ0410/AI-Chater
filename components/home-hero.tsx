@@ -5,15 +5,15 @@ import NextImage from "next/image";
 import { useRouter } from "next/navigation";
 import { CSSProperties, MouseEvent, useCallback, useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Bot, ChevronDown, Github, Image as ImageIcon, Layers3, LogOut, MessageSquareText, Settings2, WandSparkles } from "lucide-react";
-import { pickAiTerms } from "@/lib/ai-terms";
-import { HOME_AUTHOR_PROFILE } from "@/lib/home-profile";
+import { pickAiTerms } from "@/client/home/ai-terms";
+import { HOME_AUTHOR_PROFILE } from "@/client/home/home-profile";
 import {
   APPEARANCE_CHANGE_EVENT,
   DEFAULT_ACCENT,
   defaultAppearance,
   deriveBubbleColor,
   type AppearanceChangeDetail,
-} from "@/lib/appearance";
+} from "@/client/appearance";
 import {
   advanceParticles,
   createBubbleVisuals,
@@ -21,15 +21,15 @@ import {
   type BubbleParticle,
   type BubbleRect,
   type BubbleVisual,
-} from "@/lib/home-bubbles";
+} from "@/client/home/home-bubbles";
 import {
   clampHomePageIndex,
   getHomePageIndexFromScroll,
   HOME_PAGE_COUNT,
   nextHomePageIndex,
-} from "@/lib/home-sections";
-import { HOME_STAR_POINTS } from "@/lib/home-sky";
-import { CHAT_ENTRY_REQUEST_EVENT, CHAT_ENTRY_STORAGE_KEY, createChatEntryToken, isPlainPrimaryClick } from "@/lib/chat-entry-transition";
+} from "@/client/home/home-sections";
+import { HOME_STAR_POINTS } from "@/client/home/home-sky";
+import { CHAT_ENTRY_REQUEST_EVENT, CHAT_ENTRY_STORAGE_KEY, createChatEntryToken, isPlainPrimaryClick } from "@/client/chat-entry-transition";
 
 type HomeUser = { id: string; username: string } | null;
 

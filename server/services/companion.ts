@@ -1,13 +1,13 @@
 import { randomUUID } from "crypto";
 import { and, desc, eq } from "drizzle-orm";
 import { streamText } from "ai";
-import { getLanguageModel } from "@/lib/ai";
-import { getDb } from "@/lib/db";
-import { conversations, messages } from "@/lib/db/schema";
-import { textFromParts } from "@/lib/messages";
-import { chatConnectionForPreset } from "@/lib/model-configs";
-import { auditModelConfig } from "@/lib/model-controls";
-import { RequestError } from "@/lib/http";
+import { getLanguageModel } from "@/server/providers/ai";
+import { getDb } from "@/server/db";
+import { conversations, messages } from "@/server/db/schema";
+import { textFromParts } from "@/shared/messages";
+import { chatConnectionForPreset } from "@/server/services/model-configs";
+import { auditModelConfig } from "@/server/services/model-controls";
+import { RequestError } from "@/server/http/errors";
 
 export const COMPANION_PERSONA_VERSION = "catgirl-v1";
 export const COMPANION_SYSTEM_PROMPT = [

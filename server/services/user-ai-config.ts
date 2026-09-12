@@ -2,10 +2,11 @@ import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from "crypt
 import { lookup } from "dns/promises";
 import { isIP } from "net";
 import { desc, eq } from "drizzle-orm";
-import { getUserAiConnectionPresets, USER_AI_PRESET_ID, type AiProvider, type PublicAiPreset, type UserAiConnectionPreset } from "@/lib/config";
-import { getDb } from "@/lib/db";
-import { userAiConfigs } from "@/lib/db/schema";
-import { RequestError } from "@/lib/http";
+import { getUserAiConnectionPresets, USER_AI_PRESET_ID, type AiProvider, type UserAiConnectionPreset } from "@/shared/config";
+import type { PublicAiPreset } from "@/server/config";
+import { getDb } from "@/server/db";
+import { userAiConfigs } from "@/server/db/schema";
+import { RequestError } from "@/server/http/errors";
 
 export { USER_AI_PRESET_ID };
 export const CUSTOM_USER_AI_PRESET_ID = "custom";

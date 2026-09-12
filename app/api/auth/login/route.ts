@@ -1,11 +1,11 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { createSession, verifyPassword } from "@/lib/auth";
-import { routeError } from "@/lib/api";
-import { getDb } from "@/lib/db";
-import { users } from "@/lib/db/schema";
-import { assertSameOrigin, errorResponse } from "@/lib/http";
-import { credentialsSchema, normalizeUsername } from "@/lib/validators";
+import { createSession, verifyPassword } from "@/server/security/auth";
+import { routeError } from "@/server/http/route-error";
+import { getDb } from "@/server/db";
+import { users } from "@/server/db/schema";
+import { assertSameOrigin, errorResponse } from "@/server/http/errors";
+import { credentialsSchema, normalizeUsername } from "@/shared/validators";
 
 export async function POST(request: Request) {
   try {
