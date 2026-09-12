@@ -1,4 +1,6 @@
-export type VideoMode = "text-to-video" | "image-to-video" | "text-image-to-video";
+import type { VideoMode } from "@/shared/video";
+
+export type { VideoMode } from "@/shared/video";
 export type VideoGenerationRequest = { requestId: string; conversationId: string; videoPresetId: string; mode: VideoMode; prompt: string; referenceAttachmentIds: string[]; width: number; height: number; frames: number; fps: number; steps: number; source: "video-mode" };
 export type VideoAttachment = { id: string; url: string; mimeType: string; size?: number; duration?: number };
 export type VideoGeneration = { id: string; status: "queued" | "running" | "completed" | "failed" | "cancel_requested" | "cancelled"; prompt?: string; rewrittenPrompt?: string | null; negativePrompt?: string | null; shotPlan?: string | null; errorCode?: string | null; attachments?: VideoAttachment[] };

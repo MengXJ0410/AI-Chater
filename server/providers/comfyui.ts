@@ -4,7 +4,7 @@ import path from "path";
 import { RequestError } from "@/server/http/errors";
 import { saveGeneratedVideo } from "@/server/services/uploads";
 import type { VideoConnection } from "@/server/services/video-config";
-import type { VideoMode } from "@/client/video/generation-client";
+import type { VideoMode } from "@/shared/video";
 
 const headers = (config: VideoConnection) => ({
   "Content-Type": "application/json",

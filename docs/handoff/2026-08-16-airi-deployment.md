@@ -178,4 +178,4 @@ app/api/internal/companion/
 - 直接接入语音、生图、生视频或游戏 Agent。
 - 直接替换当前 AI Chater 的聊天系统喵。
 
-后续 AI 小弟实施时，必须先阅读本文档、根目录 `CLAUDE.md`、`AGENTS.md` 和 `交接文档.md`，并在完成对应阶段后更新 `更新日志.md` 喵。
+后续 AI 小弟实施时，必须先阅读本文档、根目录 `CLAUDE.md`、`AGENTS.md` 和 `docs/architecture.md`，并在完成对应阶段后更新 `更新日志.md` 喵。

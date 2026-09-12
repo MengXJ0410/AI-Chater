@@ -6,7 +6,7 @@
 
 ## 主要工作
 
-- 维护 `app/api`、`lib/db`、Drizzle schema 与 migration。
+- 维护 `app/api`、`server/db`、Drizzle schema 与 migration。
 - 维护认证、会话、权限校验、会话和消息数据。
 - 建设通用任务记录、取消、重试、状态查询和结果持久化能力。
 - 维护文件上传、读取、清理及数据归属校验。
