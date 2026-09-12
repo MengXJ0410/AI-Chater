@@ -2,6 +2,8 @@
 
 本机运行的 AI 聊天工具，支持账号注册、会话管理、流式回复、多个模型预设和图片输入。
 
+> 页面、接口与目录总览见 [`docs/project-overview.md`](docs/project-overview.md)；分层与依赖规则见 [`docs/architecture.md`](docs/architecture.md)。
+
 ## 后端技术栈
 
 - **Next.js Route Handlers + TypeScript**：提供登录、会话、聊天、上传和模型配置 API。

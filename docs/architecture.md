@@ -6,6 +6,8 @@
 
 AI Chater 是面向本机 Node.js 部署的单体 AI 应用。技术栈：Next.js 16 App Router、React 19、TypeScript、Tailwind CSS 4、Drizzle ORM、mysql2、Vercel AI SDK、Argon2id、Zod、React Markdown、Sharp 和 Lucide。
 
+> 页面、接口清单与目录总览见 `docs/project-overview.md`。
+
 ## 分层总览
 
 代码按四层组织，依赖方向单一，禁止反向依赖：
