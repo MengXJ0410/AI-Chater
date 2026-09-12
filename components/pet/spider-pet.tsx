@@ -5,13 +5,14 @@ import { usePathname } from "next/navigation";
 import {
   createSpiderState,
   defaultPetPreferences,
+  getSpiderTuning,
   parsePetPreferences,
   PET_CHANGE_EVENT,
   PET_STORAGE_KEY,
   poseSpider,
   SPIDER_ABDOMEN_OFFSET,
-  SPIDER_LEG_LIFT,
   SPIDER_LEGS,
+  SPIDER_TUNING_CHANGE_EVENT,
   stepSpider,
   type PetPreferences,
   type Point,
@@ -82,7 +83,7 @@ export function SpiderPet() {
         if (foot) {
           foot.setAttribute("cx", pose.foot.x.toFixed(1));
           foot.setAttribute("cy", pose.foot.y.toFixed(1));
-          foot.setAttribute("opacity", (1 - (pose.lift / SPIDER_LEG_LIFT) * 0.6).toFixed(2));
+          foot.setAttribute("opacity", (1 - (pose.lift / (getSpiderTuning().legLift || 1)) * 0.6).toFixed(2));
         }
       }
       const headingDeg = (current.heading * 180) / Math.PI + Math.sin(current.legPhase * 1.6) * 1.2;
@@ -163,12 +164,15 @@ export function SpiderPet() {
       if (reducedMotion) draw();
     };
 
+    const onTuningChange = () => draw();
+
     window.addEventListener("pointermove", onPointerMove, { passive: true });
     window.addEventListener("pointerdown", onWindowPointerDown, { passive: true });
     window.addEventListener("pointerup", onPointerUp, { passive: true });
     window.addEventListener("pointercancel", onPointerUp, { passive: true });
     window.addEventListener("resize", onResize);
     document.addEventListener("visibilitychange", onResize);
+    window.addEventListener(SPIDER_TUNING_CHANGE_EVENT, onTuningChange);
 
     let frame = 0;
     let previous = performance.now();
@@ -190,6 +194,7 @@ export function SpiderPet() {
       window.removeEventListener("pointercancel", onPointerUp);
       window.removeEventListener("resize", onResize);
       document.removeEventListener("visibilitychange", onResize);
+      window.removeEventListener(SPIDER_TUNING_CHANGE_EVENT, onTuningChange);
       draggingRef.current = false;
       pressRef.current = null;
       clickTimesRef.current = [];

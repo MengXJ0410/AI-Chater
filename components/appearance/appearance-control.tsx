@@ -2,7 +2,7 @@
 
 import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { Bug, ImagePlus, Monitor, Moon, Palette, RotateCcw, Sun, Trash2 } from "lucide-react";
+import { ImagePlus, Monitor, Moon, Palette, RotateCcw, Sun, Trash2 } from "lucide-react";
 import {
   ACCENT_SWATCHES,
   APPEARANCE_CHANGE_EVENT,
@@ -21,15 +21,6 @@ import {
   type AppearancePreferences,
   resolveAppearanceMode,
 } from "@/client/appearance";
-import {
-  dispatchPetChange,
-  defaultPetPreferences,
-  parsePetPreferences,
-  PET_CHANGE_EVENT,
-  PET_STORAGE_KEY,
-  savePetPreferences,
-  type PetPreferences,
-} from "@/client/pet";
 
 const maxSourceBytes = 15 * 1024 * 1024;
 const maxStoredBytes = 2.5 * 1024 * 1024;
@@ -111,7 +102,6 @@ async function compressBackground(file: File) {
 export function AppearanceControl() {
   const pathname = usePathname();
   const [appearance, setAppearance] = useState<AppearancePreferences>(defaultAppearance);
-  const [pet, setPet] = useState<PetPreferences>(defaultPetPreferences);
   const [chatBackgroundEnabled, setChatBackgroundEnabled] = useState(false);
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
@@ -150,17 +140,6 @@ export function AppearanceControl() {
   }, []);
 
   useEffect(() => {
-    const saved = parsePetPreferences(window.localStorage.getItem(PET_STORAGE_KEY));
-    void Promise.resolve().then(() => setPet(saved));
-    const handlePetChange = (event: Event) => {
-      const detail = (event as CustomEvent<PetPreferences>).detail;
-      if (detail && typeof detail === "object") setPet(detail);
-    };
-    window.addEventListener(PET_CHANGE_EVENT, handlePetChange);
-    return () => window.removeEventListener(PET_CHANGE_EVENT, handlePetChange);
-  }, []);
-
-  useEffect(() => {
     if (!open) return;
     const closeOnOutsideClick = (event: PointerEvent) => {
       if (event.target instanceof Node && !rootRef.current?.contains(event.target)) setOpen(false);
@@ -194,22 +173,6 @@ export function AppearanceControl() {
 
   function selectColorMode(colorMode: AppearanceMode) {
     updateAppearance({ ...currentAppearance, colorMode });
-  }
-
-  function updatePet(next: PetPreferences) {
-    const normalized = { ...defaultPetPreferences, ...next };
-    setPet(normalized);
-    try {
-      savePetPreferences(normalized);
-      dispatchPetChange(normalized);
-      setError("");
-    } catch {
-      setError("浏览器空间不足，宠物设置无法保存。" );
-    }
-  }
-
-  function togglePet() {
-    updatePet({ ...pet, kind: pet.kind ? null : "spider" });
   }
 
   async function handleBackgroundUpload(event: ChangeEvent<HTMLInputElement>) {
@@ -257,22 +220,6 @@ export function AppearanceControl() {
             <label className="appearance-slider appearance-bubble-activity">
               <span>气泡活跃度 <output>{currentAppearance.bubbleActivity}%</output></span>
               <input type="range" min="0" max="200" step="5" value={currentAppearance.bubbleActivity} onChange={(event) => updateAppearance({ ...currentAppearance, bubbleActivity: Number(event.target.value) })} />
-            </label>
-          </> : null}
-          {visibility.showPetControls ? <>
-            <div className="appearance-divider" />
-            <div className="appearance-panel-header"><span>桌面宠物</span></div>
-            <button className={`appearance-pet-toggle ${pet.kind ? "is-active" : ""}`} type="button" aria-pressed={pet.kind === "spider"} onClick={togglePet}>
-              <Bug size={16} />
-              {pet.kind ? "收回宠物" : "召唤宠物"}
-            </button>
-            <label className="appearance-slider">
-              <span>宠物活跃度 <output>{pet.activity}%</output></span>
-              <input type="range" min="0" max="200" step="5" value={pet.activity} onChange={(event) => updatePet({ ...pet, activity: Number(event.target.value) })} />
-            </label>
-            <label className="appearance-pet-chase">
-              <input type="checkbox" checked={pet.chaseCursor} onChange={(event) => updatePet({ ...pet, chaseCursor: event.target.checked })} />
-              <span>允许追击</span>
             </label>
           </> : null}
           {visibility.showChatGlowControls ? <>

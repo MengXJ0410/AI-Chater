@@ -4945,6 +4945,13 @@ body:has(.chat-app) .appearance-backdrop {
 .appearance-pet-chase { display: flex; align-items: center; gap: 0.45rem; margin-top: 0.55rem; color: #405249; font-size: 0.78rem; }
 .appearance-pet-chase input { accent-color: var(--accent, #1fbbbb); }
 
+.pet-control { position: fixed; right: 1.25rem; bottom: 5.25rem; z-index: 50; }
+.pet-panel { max-height: min(72vh, 36rem); overflow-y: auto; }
+
+@media (max-width: 700px) {
+  .pet-control { right: 1rem; bottom: 4.75rem; }
+}
+
 :root[data-color-mode="dark"] .appearance-pet-chase { color: var(--text-muted); }
 :root[data-color-mode="dark"] .appearance-pet-toggle { color: var(--accent); }
 

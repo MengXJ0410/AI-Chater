@@ -1,5 +1,6 @@
 import {
   createLegState,
+  getSpiderTuning,
   hipPoint,
   legMaxReach,
   legOutwardDirection,
@@ -8,9 +9,6 @@ import {
   SPIDER_BODY_RADIUS,
   SPIDER_EDGE_PADDING,
   SPIDER_LEGS,
-  SPIDER_STEP_ANGLE,
-  SPIDER_STEP_REACH,
-  SPIDER_STRIDE,
   type Point,
 } from "./spider";
 import type { SpiderLegState, SpiderState } from "./types";
@@ -125,7 +123,7 @@ export function strideTarget(
 ): Point {
   const speed = Math.hypot(vx, vy);
   if (speed < 1) return rest;
-  const stride = maxReach * SPIDER_STRIDE * legStrideFactor(leg) * (0.5 + Math.min(1.2, speed / 180));
+  const stride = maxReach * getSpiderTuning().stride * legStrideFactor(leg) * (0.5 + Math.min(1.2, speed / 180));
   return { x: rest.x + (vx / speed) * stride, y: rest.y + (vy / speed) * stride };
 }
 
@@ -182,7 +180,8 @@ function stepLegs(
       const footAngle = Math.atan2(previous.footY - hip.y, previous.footX - hip.x);
       const restAngle = Math.atan2(rest.y - hip.y, rest.x - hip.x);
       const angleError = Math.abs(normalizeAngle(footAngle - restAngle));
-      const shouldStep = (moving && (reach > maxReach * SPIDER_STEP_REACH || angleError > SPIDER_STEP_ANGLE)) || tooFar;
+      const tuning = getSpiderTuning();
+      const shouldStep = (moving && (reach > maxReach * tuning.stepReach || angleError > tuning.stepAngle)) || tooFar;
       if (shouldStep) {
         const stepTo = strideTarget(leg, rest, state.vx, state.vy, maxReach);
         return {

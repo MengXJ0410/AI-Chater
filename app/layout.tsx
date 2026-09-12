@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import { AppearanceControl } from "@/components/appearance/appearance-control";
 import { ChatEntryTransition } from "@/components/chat/chat-entry-transition";
+import { PetControl } from "@/components/pet/pet-control";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -29,7 +30,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           }
         })()`}</Script>
       </head>
-      <body><div className="app-page-content">{children}</div><AppearanceControl /><ChatEntryTransition /></body>
+      <body><div className="app-page-content">{children}</div><AppearanceControl /><PetControl /><ChatEntryTransition /></body>
     </html>
   );
 }

@@ -34,7 +34,7 @@ export type DerivedAccentTheme = {
 
 export type AppearanceChangeDetail = { accent: string; bubbleColorRange: number; bubbleActivity: number; colorMode: ResolvedAppearanceMode };
 export type ChatBackgroundChangeDetail = { enabled: boolean };
-export type AppearancePanelVisibility = { showBubbleControls: boolean; showBackgroundControls: boolean; showChatGlowControls: boolean; showPetControls: boolean };
+export type AppearancePanelVisibility = { showBubbleControls: boolean; showBackgroundControls: boolean; showChatGlowControls: boolean };
 export type BubbleColorFactors = { redFactor: number; greenFactor: number; blueFactor: number };
 export type DerivedBubbleColor = { primary: string; secondary: string; text: string };
 
@@ -52,9 +52,9 @@ export const defaultAppearance: AppearancePreferences = {
 };
 
 export function getAppearancePanelVisibility(pathname: string, chatBackgroundEnabled: boolean): AppearancePanelVisibility {
-  if (pathname === "/") return { showBubbleControls: true, showBackgroundControls: true, showChatGlowControls: false, showPetControls: true };
-  if (pathname === "/chat") return { showBubbleControls: false, showBackgroundControls: chatBackgroundEnabled, showChatGlowControls: true, showPetControls: false };
-  return { showBubbleControls: false, showBackgroundControls: false, showChatGlowControls: false, showPetControls: false };
+  if (pathname === "/") return { showBubbleControls: true, showBackgroundControls: true, showChatGlowControls: false };
+  if (pathname === "/chat") return { showBubbleControls: false, showBackgroundControls: chatBackgroundEnabled, showChatGlowControls: true };
+  return { showBubbleControls: false, showBackgroundControls: false, showChatGlowControls: false };
 }
 
 export function isHexColor(value: unknown): value is string {

@@ -1,24 +1,28 @@
 import { describe, expect, it } from "vitest";
 import {
   createSpiderState,
+  DEFAULT_SPIDER_TUNING,
   defaultPetPreferences,
+  getSpiderTuning,
   groundY,
   hipPoint,
   legMaxReach,
   legStrideFactor,
   parsePetPreferences,
   pickWanderHeading,
+  resolveSpiderTuning,
+  resetSpiderTuning,
   restFootPoint,
   solveLeg,
   SPIDER_BODY_RADIUS,
   SPIDER_EDGE_PADDING,
   SPIDER_LENGTH,
   SPIDER_LEGS,
-  SPIDER_REST_REACH,
   SPIDER_SLEEP_AFTER_MS,
   stepSpider,
   strideTarget,
   turnToward,
+  updateSpiderTuning,
   type SpiderState,
 } from "@/client/pet";
 
@@ -50,7 +54,7 @@ describe("spider legs", () => {
     for (const leg of SPIDER_LEGS) {
       const hip = hipPoint(leg, 100, 100, 1);
       const foot = restFootPoint(leg, 100, 100, 1);
-      expect(Math.hypot(foot.x - hip.x, foot.y - hip.y)).toBeCloseTo(legMaxReach(leg) * SPIDER_REST_REACH, 4);
+      expect(Math.hypot(foot.x - hip.x, foot.y - hip.y)).toBeCloseTo(legMaxReach(leg) * getSpiderTuning().restReach, 4);
     }
   });
 
@@ -124,6 +128,37 @@ describe("spider steering", () => {
     expect(Math.abs(towardPointer)).toBeLessThan(0.01);
     const free = pickWanderHeading(500, 500, viewport, null, random);
     expect(Math.abs(Math.abs(free) - Math.PI)).toBeLessThan(1e-6);
+  });
+});
+
+describe("spider tuning", () => {
+  it("merges runtime overrides and ignores invalid values", () => {
+    const tuned = resolveSpiderTuning('{"tarsusBend":-25,"restReach":0.5,"kneeFlip":-1}', null);
+    expect(tuned.tarsusBend).toBe(-25);
+    expect(tuned.restReach).toBe(0.5);
+    expect(tuned.kneeFlip).toBe(-1);
+
+    const invalid = resolveSpiderTuning("not-json", '{"femur":[1,2],"legLift":"x"}');
+    expect(invalid.femur).toEqual(DEFAULT_SPIDER_TUNING.femur);
+    expect(invalid.legLift).toBe(DEFAULT_SPIDER_TUNING.legLift);
+  });
+
+  it("lets the query string win over localStorage", () => {
+    expect(resolveSpiderTuning('{"restReach":0.9}', '{"restReach":0.4}').restReach).toBe(0.4);
+  });
+
+  it("applies live tuning updates to the leg geometry and resets", () => {
+    try {
+      updateSpiderTuning({ restReach: 0.5 });
+      expect(getSpiderTuning().restReach).toBe(0.5);
+      const leg = SPIDER_LEGS[0];
+      const hip = hipPoint(leg, 100, 100, 0);
+      const foot = restFootPoint(leg, 100, 100, 0);
+      expect(Math.hypot(foot.x - hip.x, foot.y - hip.y)).toBeCloseTo(legMaxReach(leg) * 0.5, 4);
+    } finally {
+      resetSpiderTuning();
+    }
+    expect(getSpiderTuning().restReach).toBe(DEFAULT_SPIDER_TUNING.restReach);
   });
 });
 

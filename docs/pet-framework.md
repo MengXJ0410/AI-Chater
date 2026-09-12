@@ -6,7 +6,7 @@
 
 ## 实施状态（2026-09-13）
 
-阶段 1–5 已落地：`client/pet/{types,pet-store,spider,motion,index}.ts`、`components/pet/spider-pet.tsx`、`components/appearance/appearance-control.tsx` 的“桌面宠物”区块、`app/globals.css` 的 `.spider-pet-*` 样式、`tests/pet.test.ts`，并在 `app/page.tsx` 挂载（随首页卸载）。
+阶段 1–5 已落地：`client/pet/{types,pet-store,spider,motion,index}.ts`、`components/pet/spider-pet.tsx`、独立的桌宠面板 `components/pet/pet-control.tsx`（右下角 🕷️ 按钮，含召唤/收回、活跃度、允许追击与身体姿态调参）、`app/globals.css` 的 `.spider-pet-*` 样式、`tests/pet.test.ts`，并在 `app/page.tsx` 挂载（随首页卸载）、`app/layout.tsx` 挂载面板。
 
 实现相对下文草案的调整：
 
@@ -19,6 +19,30 @@
   - `stepSpider(state, input)`：移动时落点沿运动方向做方向性步幅，并按“足端可达距离、转身角度误差”逐腿触发支撑/摆动；支撑相足端固定在世界坐标；`PetInput` 含 `chaseCursor`、`chaseTrigger`、`wake`、`random`。
 - `SpiderState` 采用 `heading/headingTarget/headingTimer/wanderPhase/wanderSince/chaseSince` 与逐腿 `legs` 状态，身体与腿几何统一按 `heading` 旋转。
 - 渲染用 SVG `path` 逐帧更新 `d`（股节/胫节/跗节三段分离 + 足端圆点），身体用 `transform` 平移/旋转；未使用草案里的 `--leg-angle-i` CSS 变量方案。
+
+### 腿部调参（无需重新构建）
+
+所有腿部几何/弯曲参数集中在 `client/pet/spider.ts` 的 `DEFAULT_SPIDER_TUNING`：
+
+| 字段 | 含义 | 典型范围 |
+| --- | --- | --- |
+| `femur` / `tibia` / `tarsus` | 四对腿的股节/胫节/跗节长度 | 各 4 个数 |
+| `restAngle` | 四对腿基准朝向（度，相对身体正前方） | 0–180 |
+| `hipX` / `hipY` | 髋部在身体局部坐标 | 小范围 |
+| `restReach` | 静止伸展比例：越大腿越直、膝弯越小 | 0.4–0.9 |
+| `stepReach` | 移动时超过该伸展比例就抬脚 | 0.8–1.0 |
+| `stepAngle` | 移动时足端方向偏差超过该弧度就抬脚（转身重摆） | 0.5–1.5 |
+| `tarsusBend` | 跗节折角（度，0 直线，负值反向） | −45–45 |
+| `stride` | 前后腿步幅系数 | 0.1–0.5 |
+| `legLift` | 抬脚高度（px） | 2–14 |
+| `kneeFlip` | 膝/跗节整体镜像：1 或 −1 | 1 / −1 |
+
+运行时覆盖（面板滑条实时生效，也支持持久化与查询串）：
+
+- 面板：右下角 🕷️「桌宠设置」→「身体姿态」直接拖动滑条，立即生效并写入 `localStorage`。
+- 控制台：`localStorage.setItem("ai-chater-spider-tuning", JSON.stringify({ tarsusBend: -20, restReach: 0.5 }))`。
+- URL：`/?spiderTuning=${encodeURIComponent('{"tarsusBend":-20,"restReach":0.5}')}`，优先级高于 localStorage（刷新时读取）。
+- 非法字段自动回退默认值；解析逻辑 `resolveSpiderTuning(stored, query)` 与实时应用 `updateSpiderTuning`/`resetSpiderTuning` 均可单测。
 
 
 ## 一、目标与范围
@@ -49,12 +73,10 @@ client/pet/
   motion.ts       # 状态机与物理步进（纯函数，可单测）
   index.ts        # 统一导出
 components/pet/
-  spider-pet.tsx  # SVG 渲染 + 订阅事件 + rAF 循环
-components/appearance/appearance-control.tsx   # 新增“桌面宠物”区块与按钮
-client/appearance.ts                            # getAppearancePanelVisibility 增加 showPetControls
-app/globals.css                                 # .spider-pet-* 样式与 reduced-motion 降级
-tests/pet.test.ts                               # 纯函数与状态机测试
-tests/appearance.test.ts                        # 更新可见性断言
+  spider-pet.tsx  # SVG 渲染 + 订阅事件 + rAF 循环（挂载于 app/page.tsx）
+  pet-control.tsx # 独立的桌宠面板：召唤/活跃度/追击 + 身体姿态滑条（挂载于 app/layout.tsx）
+app/globals.css                                 # .spider-pet-* 与 .pet-control 样式、reduced-motion 降级
+tests/pet.test.ts                               # 纯函数、状态机与实时调参测试
 ```
 
 ## 四、接口草案
@@ -132,10 +154,11 @@ export function stepSpider(state: SpiderState, input: PetInput): SpiderState;
 
 ## 六、触发与同步
 
-1. 外观面板在 `pathname === "/"` 时显示“桌面宠物”区块。
-2. “召唤宠物”按钮切换 `PetPreferences.kind`，写 `localStorage` 并派发 `PET_CHANGE_EVENT`。
-3. `SpiderPet` 初次挂载读取偏好，并监听事件；`kind === null` 时不渲染。
-4. 组件卸载（离开首页）时取消 rAF 与事件监听，不写状态。
+1. 独立的桌宠面板 `PetControl` 在 `pathname === "/"` 时显示右下角 🕷️ 按钮（与「自定义外观」并排、位于其上方）。
+2. “召唤宠物”按钮切换 `PetPreferences.kind`，写 `localStorage` 并派发 `PET_CHANGE_EVENT`；活跃度与追击开关同样持久化。
+3. 面板的“身体姿态”滑条调用 `updateSpiderTuning`，重建腿部骨架、写 `localStorage` 并派发 `SPIDER_TUNING_CHANGE_EVENT`，`SpiderPet` 订阅后立即重绘。
+4. `SpiderPet` 初次挂载读取偏好，并监听事件；`kind === null` 时不渲染。
+5. 组件卸载（离开首页）时取消 rAF 与事件监听，不写状态。
 
 ## 七、渲染与性能
 
