@@ -1,7 +1,10 @@
 import { randomUUID } from "crypto";
 import { mkdir, readFile, rm, writeFile } from "fs/promises";
 import path from "path";
+import { and, eq, isNull } from "drizzle-orm";
 import sharp, { type Metadata } from "sharp";
+import { getDb } from "@/server/db";
+import { users } from "@/server/db/schema";
 import { uploadPath } from "@/server/services/uploads";
 import { RequestError } from "@/server/http/errors";
 
@@ -63,4 +66,51 @@ export async function removeAvatar(storageKey: string | null | undefined) {
 
 export function avatarUrl(updatedAt: Date | string | null | undefined) {
   return updatedAt ? `/api/me/avatar?v=${encodeURIComponent(new Date(updatedAt).toISOString())}` : null;
+}
+
+async function getAvatarRecord(userId: string) {
+  const rows = await getDb().select({
+    storageKey: users.avatarStorageKey,
+    mimeType: users.avatarMimeType,
+    updatedAt: users.avatarUpdatedAt,
+  }).from(users).where(and(eq(users.id, userId), isNull(users.deletedAt))).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function readUserAvatar(userId: string) {
+  const avatar = await getAvatarRecord(userId);
+  if (!avatar?.storageKey || !avatar.mimeType) throw new RequestError("头像不存在。", 404);
+  const content = await readAvatar(avatar.storageKey);
+  return { content, mimeType: avatar.mimeType };
+}
+
+export async function replaceUserAvatar(userId: string, file: File) {
+  const normalized = await normalizeAvatar(file);
+  const newStorageKey = await saveAvatar(normalized.buffer);
+  try {
+    const current = await getAvatarRecord(userId);
+    if (!current) throw new RequestError("账号不存在。", 401);
+    const updatedAt = new Date();
+    await getDb().update(users).set({
+      avatarStorageKey: newStorageKey,
+      avatarMimeType: normalized.mimeType,
+      avatarUpdatedAt: updatedAt,
+    }).where(and(eq(users.id, userId), isNull(users.deletedAt)));
+    await removeAvatar(current.storageKey);
+    return { avatarUrl: avatarUrl(updatedAt) };
+  } catch (error) {
+    await removeAvatar(newStorageKey).catch(() => undefined);
+    throw error;
+  }
+}
+
+export async function deleteUserAvatar(userId: string) {
+  const current = await getAvatarRecord(userId);
+  if (!current) throw new RequestError("账号不存在。", 401);
+  await getDb().update(users).set({
+    avatarStorageKey: null,
+    avatarMimeType: null,
+    avatarUpdatedAt: null,
+  }).where(and(eq(users.id, userId), isNull(users.deletedAt)));
+  await removeAvatar(current.storageKey);
 }

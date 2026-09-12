@@ -1,8 +1,11 @@
 import { randomUUID } from "crypto";
 import { mkdir, readFile, rm, writeFile } from "fs/promises";
 import path from "path";
+import { and, eq, isNull } from "drizzle-orm";
 import sharp from "sharp";
 import { getMaxUploadBytes, getUploadDirectory } from "@/server/config";
+import { getDb } from "@/server/db";
+import { attachments } from "@/server/db/schema";
 import { RequestError } from "@/server/http/errors";
 
 const supportedTypes: Record<string, string> = {
@@ -79,4 +82,42 @@ export async function removeImages(storageKeys: string[]) {
   await Promise.all(storageKeys.map(async (storageKey) => {
     await rm(uploadPath(storageKey), { force: true });
   }));
+}
+
+export async function createUploadedAttachment(userId: string, file: File) {
+  validateImage(file);
+  const storageKey = await saveImage(file);
+  try {
+    const attachment = {
+      id: randomUUID(),
+      userId,
+      storageKey,
+      mimeType: file.type,
+      size: file.size,
+      originalName: file.name.slice(0, 255) || "image",
+    };
+    await getDb().insert(attachments).values(attachment);
+    return { id: attachment.id, mimeType: attachment.mimeType, originalName: attachment.originalName };
+  } catch (error) {
+    await removeImages([storageKey]).catch(() => undefined);
+    throw error;
+  }
+}
+
+export async function deleteUnsentAttachment(userId: string, id: string) {
+  const rows = await getDb().select().from(attachments).where(and(
+    eq(attachments.id, id),
+    eq(attachments.userId, userId),
+    isNull(attachments.messageId),
+  )).limit(1);
+  if (!rows[0]) throw new RequestError("图片不存在或已发送。", 404);
+  await getDb().delete(attachments).where(eq(attachments.id, id));
+  await removeImages([rows[0].storageKey]);
+}
+
+export async function getUserAttachment(userId: string, id: string) {
+  const rows = await getDb().select().from(attachments)
+    .where(and(eq(attachments.id, id), eq(attachments.userId, userId))).limit(1);
+  if (!rows[0]) throw new RequestError("图片不存在。", 404);
+  return rows[0];
 }

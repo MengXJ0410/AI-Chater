@@ -1,29 +1,16 @@
-import { and, eq, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { clearSessionCookie, hashPassword, requireUser, verifyPassword } from "@/server/security/auth";
+import { clearSessionCookie, requireUser } from "@/server/security/auth";
 import { routeError } from "@/server/http/route-error";
-import { getDb } from "@/server/db";
-import { sessions, userAiConfigs, users } from "@/server/db/schema";
-import { assertSameOrigin, errorResponse } from "@/server/http/errors";
+import { assertSameOrigin } from "@/server/http/errors";
 import { passwordChangeSchema } from "@/shared/validators";
+import { changePassword } from "@/server/services/account";
 
 export async function PATCH(request: Request) {
   try {
     assertSameOrigin(request);
     const user = await requireUser();
     const { currentPassword, newPassword } = passwordChangeSchema.parse(await request.json());
-    const account = await getDb().select({ passwordHash: users.passwordHash }).from(users)
-      .where(and(eq(users.id, user.id), isNull(users.deletedAt))).limit(1);
-    if (!account[0] || !(await verifyPassword(account[0].passwordHash, currentPassword))) {
-      return errorResponse("当前密码错误。", 401);
-    }
-
-    const passwordHash = await hashPassword(newPassword);
-    await getDb().transaction(async (tx) => {
-      await tx.update(users).set({ passwordHash }).where(and(eq(users.id, user.id), isNull(users.deletedAt)));
-      await tx.delete(sessions).where(eq(sessions.userId, user.id));
-      await tx.delete(userAiConfigs).where(eq(userAiConfigs.userId, user.id));
-    });
+    await changePassword(user.id, currentPassword, newPassword);
     await clearSessionCookie();
     return NextResponse.json({ ok: true });
   } catch (error) {
