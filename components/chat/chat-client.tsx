@@ -5,12 +5,12 @@ import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Bot, ChevronLeft, ChevronRight, Command, FileImage, LayoutPanelLeft, LoaderCircle, LogOut, Menu, MessageSquarePlus, MoreHorizontal, Paperclip, Pencil, PlugZap, SendHorizontal, Settings2, Sparkles, Square, Trash2, UserRound, Video, WandSparkles, X } from "lucide-react";
-import { Markdown } from "@/components/markdown";
-import { ChatAmbientLayer } from "@/components/chat-ambient-layer";
-import { UserAvatar } from "@/components/user-avatar";
-import { ImageWorkspace } from "@/components/image-workspace";
-import { VideoWorkspace } from "@/components/video-workspace";
-import { SavedConfigList } from "@/components/saved-config-list";
+import { Markdown } from "@/components/chat/markdown";
+import { ChatAmbientLayer } from "@/components/chat/chat-ambient-layer";
+import { UserAvatar } from "@/components/profile/user-avatar";
+import { ImageWorkspace } from "@/components/image/image-workspace";
+import { VideoWorkspace } from "@/components/video/video-workspace";
+import { SavedConfigList } from "@/components/chat/saved-config-list";
 import { CHAT_BACKGROUND_CHANGE_EVENT, CHAT_BACKGROUND_STORAGE_KEY } from "@/client/appearance";
 import { CHAT_ENTRY_READY_EVENT, CHAT_ENTRY_STORAGE_KEY, isPendingChatEntry } from "@/client/chat-entry-transition";
 import { appendStreamText, getGenerationLabel } from "@/client/chat-message";

@@ -8,7 +8,7 @@ import { clampAvatarCropPosition, getAvatarCropScale, type AvatarCropPosition } 
 import { getAvatarFileError } from "@/client/user-avatar";
 import { ApiRequestError } from "@/client/api/http";
 import { getProfile, removeAvatar as removeAvatarRequest, uploadAvatar } from "@/client/api/profile";
-import { UserAvatar } from "@/components/user-avatar";
+import { UserAvatar } from "@/components/profile/user-avatar";
 
 type ProfileUser = { id: string; username: string; avatarUrl?: string | null };
 type ProfilePayload = { user: ProfileUser; avatarServiceAvailable: boolean };

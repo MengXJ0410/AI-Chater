@@ -2,8 +2,8 @@
 
 import { ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
 import { LoaderCircle } from "lucide-react";
-import { ImageComposer } from "@/components/image-composer";
-import { GeneratedImageGrid } from "@/components/generated-image-grid";
+import { ImageComposer } from "@/components/image/image-composer";
+import { GeneratedImageGrid } from "@/components/image/generated-image-grid";
 import { getImageGenerationFailureMessage, imagesFromGeneration, normalizeImagePreset, type GeneratedImage, type ImageGenerationDraft, type ImagePreset } from "@/client/image/generation-client";
 import { getImagePresets } from "@/client/api/presets";
 import { removeUpload, uploadImage } from "@/client/api/uploads";

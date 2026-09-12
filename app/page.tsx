@@ -1,4 +1,4 @@
-import { HomeHero } from "@/components/home-hero";
+import { HomeHero } from "@/components/home/home-hero";
 import { getCurrentUser } from "@/server/security/auth";
 import { getHomeBackgrounds } from "@/server/services/home-backgrounds";
 

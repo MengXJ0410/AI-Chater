@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { CompanionClient } from "@/components/companion-client";
+import { CompanionClient } from "@/components/companion/companion-client";
 import { getCurrentUser } from "@/server/security/auth";
 
 export const dynamic = "force-dynamic";

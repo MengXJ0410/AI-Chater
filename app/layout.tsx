@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Script from "next/script";
-import { AppearanceControl } from "@/components/appearance-control";
-import { ChatEntryTransition } from "@/components/chat-entry-transition";
+import { AppearanceControl } from "@/components/appearance/appearance-control";
+import { ChatEntryTransition } from "@/components/chat/chat-entry-transition";
 import "./globals.css";
 
 export const metadata: Metadata = {
