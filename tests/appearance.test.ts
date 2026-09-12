@@ -93,11 +93,11 @@ describe("appearance preferences", () => {
   });
 
   it("shows only relevant controls for each page context", () => {
-    expect(getAppearancePanelVisibility("/", false)).toEqual({ showBubbleControls: true, showBackgroundControls: true, showChatGlowControls: false });
-    expect(getAppearancePanelVisibility("/chat", true)).toEqual({ showBubbleControls: false, showBackgroundControls: true, showChatGlowControls: true });
-    expect(getAppearancePanelVisibility("/chat", false)).toEqual({ showBubbleControls: false, showBackgroundControls: false, showChatGlowControls: true });
-    expect(getAppearancePanelVisibility("/login", true)).toEqual({ showBubbleControls: false, showBackgroundControls: false, showChatGlowControls: false });
-    expect(getAppearancePanelVisibility("/settings", true)).toEqual({ showBubbleControls: false, showBackgroundControls: false, showChatGlowControls: false });
+    expect(getAppearancePanelVisibility("/", false)).toEqual({ showBubbleControls: true, showBackgroundControls: true, showChatGlowControls: false, showPetControls: true });
+    expect(getAppearancePanelVisibility("/chat", true)).toEqual({ showBubbleControls: false, showBackgroundControls: true, showChatGlowControls: true, showPetControls: false });
+    expect(getAppearancePanelVisibility("/chat", false)).toEqual({ showBubbleControls: false, showBackgroundControls: false, showChatGlowControls: true, showPetControls: false });
+    expect(getAppearancePanelVisibility("/login", true)).toEqual({ showBubbleControls: false, showBackgroundControls: false, showChatGlowControls: false, showPetControls: false });
+    expect(getAppearancePanelVisibility("/settings", true)).toEqual({ showBubbleControls: false, showBackgroundControls: false, showChatGlowControls: false, showPetControls: false });
   });
 });
 

@@ -4,6 +4,23 @@
 
 首页 `/` 三屏滚动页上的桌面宠物方案。第一款宠物为虚拟蜘蛛，通过右下角“自定义外观”面板中的“召唤宠物”按钮召唤。本文档只定义框架，具体实现按“实施阶段”推进。
 
+## 实施状态（2026-09-13）
+
+阶段 1–5 已落地：`client/pet/{types,pet-store,spider,motion,index}.ts`、`components/pet/spider-pet.tsx`、`components/appearance/appearance-control.tsx` 的“桌面宠物”区块、`app/globals.css` 的 `.spider-pet-*` 样式、`tests/pet.test.ts`，并在 `app/page.tsx` 挂载（随首页卸载）。
+
+实现相对下文草案的调整：
+
+- 接口由单一 `spiderLegAngles(phase, status)` 扩展为逐腿独立的**三节式 IK** 与方向性步态：
+  - `SPIDER_LEGS`：8 条腿各自独立的髋位、股节/胫节/跗节长度、基准朝向与膝弯曲方向。
+  - `solveTwoBone(hip, target, upper, lower, kneeBias)`：二骨余弦定理，供上两节使用。
+  - `solveLeg(hip, foot, femur, tibia, tarsus, kneeBias)`：先由可达性解出跗节折角（近端张、远端接近满伸时自动伸直，保证足端精确落地），再对股节+胫节解二骨 IK，返回 `{ knee, ankle, foot }`。
+  - `legStrideFactor(leg)` / `strideTarget(...)`：按腿的方向给出步幅（前腿前伸、后腿后蹬）。
+  - `poseSpider(state)`：输出每条腿的髋/膝/踝/足与抬腿量供渲染。
+  - `stepSpider(state, input)`：移动时落点沿运动方向做方向性步幅，并按“足端可达距离、转身角度误差”逐腿触发支撑/摆动；支撑相足端固定在世界坐标；`PetInput` 含 `chaseCursor`、`chaseTrigger`、`wake`、`random`。
+- `SpiderState` 采用 `heading/headingTarget/headingTimer/wanderPhase/wanderSince/chaseSince` 与逐腿 `legs` 状态，身体与腿几何统一按 `heading` 旋转。
+- 渲染用 SVG `path` 逐帧更新 `d`（股节/胫节/跗节三段分离 + 足端圆点），身体用 `transform` 平移/旋转；未使用草案里的 `--leg-angle-i` CSS 变量方案。
+
+
 ## 一、目标与范围
 
 - **纯前端功能**：不新增数据库表、API 或服务端逻辑。
@@ -88,25 +105,30 @@ export function stepSpider(state: SpiderState, input: PetInput): SpiderState;
 ## 五、状态机
 
 ```
-      召唤
-       │
-       ▼
-   idle ──空闲超时──▶ sleep
-     │                  │
-     │ 随机航点          │ 点击/移动
-     ▼                  │
-   walk ◀───────────────┘
-     │ 光标靠近
-     ▼
-   chase ──按住──▶ drag ──松手──▶ fall ──落地──▶ walk
+                召唤
+                 │
+                 ▼
+              wander ──闲逛满 5 分钟──▶ sleep
+            ▲   │  │                    │
+   远离超 3 倍 │   │  │ 1 秒内左键 ≥5 次    │ 点击蜘蛛
+            │   │  │                    ▼
+            │   │  └──────────────▶ chase ─┘
+            │   │                     │ 到达鼠标/超时
+            │   ▼                     ▼
+            └─ evade ◀────────────────┘
+                 ▲
+      鼠标距离 < 自身长度（wander 时）
 ```
 
-- **idle**：原地轻微摆动，随机等待后出发。
-- **walk**：沿视口边缘或随机航点爬行，取边缘时 `facing` 指向移动方向；复用气泡物理中的 `clamp` / 边界约束思路。
-- **chase**：光标进入半径时靠近并加速，过近则后撤（可由 `chaseCursor` 关闭）。
-- **drag**：Pointer 按住拖动，腿做挣扎步态；放开后进入 fall。
-- **fall**：重力下落，若存在 `webAnchor` 则先按蛛丝摆动衰减，触底后 walk。
-- **sleep**：长时间无交互缩成一团，任何指针事件唤醒。
+任意状态按住拖动进入 drag，松手进入 fall，落地/蛛丝摆定回到 wander。
+
+- **wander（闲逛，默认）**：以缓慢波动（`0.55±0.35` 正弦）的速度移动，方向每 0.9–2.3 秒更新一次；新方向为随机方向与“朝向鼠标方向”的加权混合（鼠标存在时权重 0.55），并叠加边缘回避分量，保证不出屏。
+- **chase（追击）**：1 秒内左键点击任意处 ≥5 次触发（受 `chaseCursor` 开关控制）；快速转向鼠标并高速靠近，到达（< 0.75 自身长度）或超过 3.5 秒后转入 evade。
+- **evade（躲避）**：wander 时鼠标进入自身长度（`SPIDER_LENGTH`）以内立即触发，背向鼠标逃离；距离超过自身长度 3 倍后回到 wander。点击蜘蛛也会进入 evade（惊慌）。
+- **sleep（睡觉）**：连续闲逛满 5 分钟（`SPIDER_SLEEP_AFTER_MS`）进入，腿收缩静止；点击蜘蛛唤醒并进入 evade，快速连点则进入 chase。
+- **drag / fall**：拖动挣扎、松手重力下落，高处会挂蛛丝摆动衰减，落地回到 wander。
+
+`PetInput` 相应新增 `chaseCursor`、`chaseTrigger`、`wake`，`SpiderState` 用 `heading/headingTarget/headingTimer/wanderPhase/wanderSince/chaseSince` 取代原先的 `idleSince/targetX/targetY/waitMs`。
 
 ## 六、触发与同步
 
