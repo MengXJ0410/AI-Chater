@@ -2,7 +2,7 @@
 
 本机运行的 AI 聊天工具，支持账号注册、会话管理、流式回复、多个模型预设和图片输入。
 
-> 页面、接口与目录总览见 [`docs/project-overview.md`](docs/project-overview.md)；分层与依赖规则见 [`docs/architecture.md`](docs/architecture.md)。
+> 页面、接口与目录总览见 [`docs/project-overview.md`](docs/project-overview.md)；分层与依赖规则见 [`docs/architecture.md`](docs/architecture.md)；首页桌宠框架见 [`docs/pet-framework.md`](docs/pet-framework.md)。
 
 ## 后端技术栈
 
