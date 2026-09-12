@@ -50,7 +50,7 @@
 运行时覆盖与预设：
 
 - 面板：右下角 🕷️「桌宠设置」→ 选择足对后拖动滑条，实时生效并写入 `localStorage`。
-- 预设：面板「参数预设」可命名保存当前整套参数到 `localStorage["ai-chater-spider-presets-v1"]`，点击名称载入、垃圾桶删除。
+- 预设：面板「参数预设」可命名保存当前整套参数到 `localStorage["ai-chater-spider-presets-v1"]`，点击名称载入、垃圾桶删除；右上角按钮可**导出为 `spider-presets.json`**（`{ type: "ai-chater-spider-presets", version: 1, presets: [...] }`，可放进任意文件夹/纳入版本管理）或**从 JSON 文件导入**（按 id 去重合并，兼容裸数组格式）。
 - 控制台 / URL：`localStorage.setItem("ai-chater-spider-tuning", JSON.stringify({ restReach: 0.5, pairs: [{ femur: 40 }] }))`；或 `/?spiderTuning=<encodeURIComponent(JSON)>`（优先级高于 localStorage，刷新时读取）。
 - 非法/越界字段自动夹紧或回退默认值；`normalizeSpiderTuning`、`resolveSpiderTuning`、`updateSpiderTuning`、`resetSpiderTuning`、`parseSpiderPresets` 均可单测。
 

@@ -9,6 +9,7 @@ import {
   hipPoint,
   legMaxReach,
   legStrideFactor,
+  mergeSpiderPresets,
   normalizeSpiderTuning,
   parsePetPreferences,
   parseSpiderPresets,
@@ -16,6 +17,7 @@ import {
   resolveSpiderTuning,
   resetSpiderTuning,
   restFootPoint,
+  serializeSpiderPresets,
   solveLeg,
   SPIDER_BODY_RADIUS,
   SPIDER_EDGE_PADDING,
@@ -170,6 +172,23 @@ describe("spider tuning", () => {
     expect(parsed[0].tuning.restReach).toBeCloseTo(0.42, 5);
     expect(parsed[1].tuning.pairs).toHaveLength(4);
     expect(parseSpiderPresets("nope")).toEqual([]);
+  });
+
+  it("round-trips presets through a versioned JSON file", () => {
+    const preset = createSpiderPreset("A", { ...getSpiderTuning(), restReach: 0.42 });
+    const text = serializeSpiderPresets([preset]);
+    expect(JSON.parse(text)).toMatchObject({ type: "ai-chater-spider-presets", version: 1 });
+    const parsed = parseSpiderPresets(text);
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0].tuning.restReach).toBeCloseTo(0.42, 5);
+    expect(parseSpiderPresets(JSON.stringify([{ name: "legacy" }]))).toHaveLength(1);
+  });
+
+  it("merges imported presets without id collisions", () => {
+    const preset = createSpiderPreset("A", getSpiderTuning());
+    const merged = mergeSpiderPresets([preset], [preset, { ...preset, name: "B" }]);
+    expect(merged).toHaveLength(3);
+    expect(new Set(merged.map((item) => item.id)).size).toBe(3);
   });
 
   it("applies live tuning updates to the leg geometry and resets", () => {

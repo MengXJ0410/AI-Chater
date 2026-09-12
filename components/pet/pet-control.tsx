@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { usePathname } from "next/navigation";
-import { Bug, RotateCcw, Save, Trash2 } from "lucide-react";
+import { Bug, Download, RotateCcw, Save, Trash2, Upload } from "lucide-react";
 import {
   createSpiderPreset,
   DEFAULT_SPIDER_TUNING,
   defaultPetPreferences,
   dispatchPetChange,
   getSpiderTuning,
+  mergeSpiderPresets,
   parsePetPreferences,
   parseSpiderPresets,
   PET_CHANGE_EVENT,
@@ -16,7 +17,9 @@ import {
   resetSpiderTuning,
   savePetPreferences,
   saveSpiderPresets,
+  serializeSpiderPresets,
   SPIDER_PAIR_LABELS,
+  SPIDER_PRESET_FILE_NAME,
   SPIDER_PRESET_STORAGE_KEY,
   SPIDER_TUNING_CHANGE_EVENT,
   updateSpiderTuning,
@@ -60,6 +63,7 @@ export function PetControl() {
   const [presetName, setPresetName] = useState("");
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const saved = parsePetPreferences(window.localStorage.getItem(PET_STORAGE_KEY));
@@ -139,6 +143,29 @@ export function PetControl() {
     persistPresets(presets.filter((preset) => preset.id !== id));
   }
 
+  function handleExportPresets() {
+    if (!presets.length) return;
+    const blob = new Blob([serializeSpiderPresets(presets)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = SPIDER_PRESET_FILE_NAME;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleImportPresets(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      const imported = parseSpiderPresets(await file.text());
+      if (imported.length) persistPresets(mergeSpiderPresets(presets, imported));
+    } catch {
+      // 读取失败时保持现有预设
+    }
+  }
+
   if (pathname !== "/") return null;
 
   const pair = tuning.pairs[pairIndex] ?? DEFAULT_SPIDER_TUNING.pairs[0];
@@ -194,7 +221,14 @@ export function PetControl() {
           <TuneSlider label="急转阈值" value={tuning.pivotAngle} min={0} max={3.14} step={0.02} format={(value) => value.toFixed(2)} onChange={(pivotAngle) => changeTuning({ pivotAngle })} />
 
           <div className="appearance-divider" />
-          <div className="appearance-panel-header"><span>参数预设</span></div>
+          <div className="appearance-panel-header">
+            <span>参数预设</span>
+            <div className="appearance-actions">
+              <button className="appearance-icon-button" data-tooltip="导出 JSON" type="button" aria-label="导出预设为 JSON 文件" disabled={!presets.length} onClick={handleExportPresets}><Download size={16} /></button>
+              <button className="appearance-icon-button" data-tooltip="导入 JSON" type="button" aria-label="从 JSON 文件导入预设" onClick={() => importInputRef.current?.click()}><Upload size={16} /></button>
+            </div>
+          </div>
+          <input className="appearance-file-input" ref={importInputRef} type="file" accept="application/json,.json" onChange={handleImportPresets} />
           <div className="pet-preset-save">
             <input type="text" value={presetName} placeholder="预设名称" aria-label="预设名称" onChange={(event) => setPresetName(event.target.value)} />
             <button className="appearance-icon-button" data-tooltip="保存当前为预设" type="button" aria-label="保存当前为预设" onClick={handleSavePreset}><Save size={16} /></button>
