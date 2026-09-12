@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { modelStreamErrorHandler, testModelConnection } from "@/server/providers/ai";
 import { getAiPresets } from "@/server/config";
 import { getUserAiConnectionPresets } from "@/shared/config";
-import { decryptApiKey, encryptApiKey, normalizeBaseUrl, validateUserAiConfig } from "@/server/services/user-ai-config";
+import { decryptApiKey, encryptApiKey } from "@/server/security/api-key-crypto";
+import { normalizeBaseUrl } from "@/server/security/url-safety";
+import { validateUserAiConfig } from "@/server/services/user-ai-config";
 import { chatSchema, credentialsSchema, modelConfigCreateSchema, modelConfigUpdateSchema, userAiConfigSchema } from "@/shared/validators";
 
 const originalPresets = process.env.AI_PRESETS_JSON;

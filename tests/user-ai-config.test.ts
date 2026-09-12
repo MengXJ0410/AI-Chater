@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { getUserAiConnectionPresets } from "@/shared/config";
-import { CUSTOM_USER_AI_PRESET_ID, decryptApiKey, encryptApiKey, getPublicUserAiConnectionPresets, normalizeBaseUrl, toUserAiPreset, validateUserAiConfig } from "@/server/services/user-ai-config";
+import { decryptApiKey, encryptApiKey } from "@/server/security/api-key-crypto";
+import { normalizeBaseUrl } from "@/server/security/url-safety";
+import { CUSTOM_USER_AI_PRESET_ID, getPublicUserAiConnectionPresets, toUserAiPreset, validateUserAiConfig } from "@/server/services/user-ai-config";
 
 const originalKeys = process.env.AI_CONFIG_ENCRYPTION_KEYS;
 const originalActiveKeyId = process.env.AI_CONFIG_ACTIVE_KEY_ID;

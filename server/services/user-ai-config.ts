@@ -1,12 +1,12 @@
-import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from "crypto";
-import { lookup } from "dns/promises";
-import { isIP } from "net";
+import { randomUUID } from "crypto";
 import { desc, eq } from "drizzle-orm";
 import { getUserAiConnectionPresets, USER_AI_PRESET_ID, type AiProvider, type UserAiConnectionPreset } from "@/shared/config";
 import type { PublicAiPreset } from "@/server/config";
 import { getDb } from "@/server/db";
 import { userAiConfigs } from "@/server/db/schema";
 import { RequestError } from "@/server/http/errors";
+import { decryptApiKey, encryptApiKey, getActiveEncryptionKeyId } from "@/server/security/api-key-crypto";
+import { assertPublicCompatibleBaseUrl, normalizeBaseUrl } from "@/server/security/url-safety";
 
 export { USER_AI_PRESET_ID };
 export const CUSTOM_USER_AI_PRESET_ID = "custom";
@@ -16,11 +16,6 @@ const OFFICIAL_BASE_URLS: Record<Exclude<AiProvider, "openai-compatible">, strin
   xai: "https://api.x.ai/v1",
   anthropic: "https://api.anthropic.com",
   google: "https://generativelanguage.googleapis.com",
-};
-
-type EncryptionKeyring = {
-  activeKeyId: string;
-  keys: Map<string, Buffer>;
 };
 
 export type UserAiConfigInput = {
@@ -86,136 +81,16 @@ export function getUserAiConnectionPresetById(presetId: string) {
   return getConnectionPreset(presetId);
 }
 
-function decodeEncryptionKey(value: string, label: string) {
-  const key = Buffer.from(value, "base64");
-  if (key.length !== 32) throw new Error(`${label} 必须是 32 字节 Base64 密钥。`);
-  return key;
-}
-
-function getEncryptionKeyring(): EncryptionKeyring {
-  const singleKey = process.env.AI_CONFIG_ENCRYPTION_KEY;
-  if (singleKey) return { activeKeyId: "default", keys: new Map([["default", decodeEncryptionKey(singleKey, "AI_CONFIG_ENCRYPTION_KEY")]]) };
-
-  const raw = process.env.AI_CONFIG_ENCRYPTION_KEYS;
-  const activeKeyId = process.env.AI_CONFIG_ACTIVE_KEY_ID;
-  if (!raw || !activeKeyId) throw new Error("未配置 AI_CONFIG_ENCRYPTION_KEY。");
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new Error("AI_CONFIG_ENCRYPTION_KEYS 必须是 JSON 对象。");
-  }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("AI_CONFIG_ENCRYPTION_KEYS 必须是 JSON 对象。");
-  const keys = new Map<string, Buffer>();
-  for (const [keyId, value] of Object.entries(parsed)) {
-    if (!/^[a-zA-Z0-9_-]{1,64}$/.test(keyId) || typeof value !== "string") throw new Error("AI_CONFIG_ENCRYPTION_KEYS 包含无效 key id 或值。");
-    keys.set(keyId, decodeEncryptionKey(value, `AI_CONFIG_ENCRYPTION_KEYS.${keyId}`));
-  }
-  if (!keys.has(activeKeyId)) throw new Error("AI_CONFIG_ACTIVE_KEY_ID 未在密钥环中定义。");
-  return { activeKeyId, keys };
-}
-
-export function getActiveEncryptionKeyId() {
-  return getEncryptionKeyring().activeKeyId;
-}
-
-function isLoopbackHost(hostname: string) {
-  const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1";
-}
-
-function isPrivateIp(hostname: string) {
-  const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  const version = isIP(normalized);
-  if (version === 4) {
-    const octets = normalized.split(".").map(Number);
-    return octets[0] === 0 || octets[0] === 10 || octets[0] === 127 || (octets[0] === 169 && octets[1] === 254)
-      || (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) || (octets[0] === 192 && octets[1] === 168);
-  }
-  if (version === 6) {
-    return normalized === "::1" || normalized.startsWith("fc") || normalized.startsWith("fd") || normalized.startsWith("fe80:") || normalized.startsWith("::ffff:");
-  }
-  return false;
-}
-
-function isInternalHostname(hostname: string) {
-  const normalized = hostname.toLowerCase().replace(/\.$/, "");
-  return normalized === "localhost" || normalized.endsWith(".localhost") || normalized.endsWith(".local") || normalized.endsWith(".internal");
-}
-
-export function assertSafeRequestUrl(value: string) {
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    throw new RequestError("模型请求地址无效。", 502);
-  }
-  const loopback = isLoopbackHost(url.hostname);
-  if (url.username || url.password || (isPrivateIp(url.hostname) && !loopback)) {
-    throw new RequestError("模型请求地址指向不允许的内网地址。", 502);
-  }
-  if (url.protocol !== "https:" && !(loopback && url.protocol === "http:")) {
-    throw new RequestError("模型请求地址必须使用 HTTPS。", 502);
-  }
-  if (!loopback && isInternalHostname(url.hostname)) {
-    throw new RequestError("模型请求地址使用了不允许的内部主机名。", 502);
-  }
-}
-
-export async function assertSafeResolvedRequestUrl(value: string) {
-  assertSafeRequestUrl(value);
-  const url = new URL(value);
-  if (isIP(url.hostname) || isLoopbackHost(url.hostname)) return;
-  const addresses = await lookup(url.hostname, { all: true, verbatim: true });
-  if (addresses.some(({ address }) => isPrivateIp(address))) {
-    throw new RequestError("模型请求地址解析到了不允许的内网地址。", 502);
-  }
-}
-
-export function normalizeBaseUrl(value: string, provider: AiProvider = "openai-compatible") {
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    throw new RequestError("Base URL 格式无效。");
-  }
-  const loopback = isLoopbackHost(url.hostname);
-  if (url.username || url.password || url.search || url.hash || (isPrivateIp(url.hostname) && !loopback)) {
-    throw new RequestError("Base URL 不能包含账号、查询参数、片段或内网地址。");
-  }
-  if (url.protocol !== "https:" && !(provider === "openai-compatible" && loopback && url.protocol === "http:")) {
-    throw new RequestError("Base URL 必须使用 HTTPS；本地兼容模型可使用 HTTP loopback 地址。");
-  }
-  if (loopback && provider !== "openai-compatible") {
-    throw new RequestError("只有 OpenAI Compatible Provider 可以连接本机地址。", 403);
-  }
-  if (!loopback && isInternalHostname(url.hostname)) {
-    throw new RequestError("Base URL 不允许使用内部主机名。", 403);
-  }
-  const pathname = url.pathname.replace(/\/+$/, "") || "/";
-  return `${url.origin}${pathname}`;
-}
-
 export function validateUserAiConfig(input: { provider: AiProvider; baseUrl: string; model: string }, options?: { allowUnlistedCompatibleUrl?: boolean }) {
   const baseUrl = input.baseUrl ? normalizeBaseUrl(input.baseUrl, input.provider) : undefined;
   if (input.provider === "openai-compatible") {
     if (!baseUrl) throw new RequestError("OpenAI Compatible Provider 必须填写 Base URL。");
     if (options?.allowUnlistedCompatibleUrl) {
-      const customUrl = new URL(baseUrl);
-      if (customUrl.protocol !== "https:" || isIP(customUrl.hostname) || isLoopbackHost(customUrl.hostname)) {
-        throw new RequestError("自定义 Base URL 必须是 HTTPS 公网域名。", 403);
-      }
+      assertPublicCompatibleBaseUrl(baseUrl);
     }
     const allowlist = process.env.USER_AI_ALLOWED_BASE_URLS;
     if (allowlist && !options?.allowUnlistedCompatibleUrl) {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(allowlist);
-      } catch {
-        throw new Error("USER_AI_ALLOWED_BASE_URLS 必须是 JSON 数组。");
-      }
-      if (!Array.isArray(parsed) || !parsed.every((value) => typeof value === "string")) throw new Error("USER_AI_ALLOWED_BASE_URLS 必须是 URL 字符串数组。");
-      const allowed = new Set(parsed.map((value) => normalizeBaseUrl(value, input.provider)));
+      const allowed = parseAllowedBaseUrls(allowlist, input.provider);
       if (!allowed.has(baseUrl)) throw new RequestError("该 Base URL 未获管理员授权。", 403);
     }
   } else if (baseUrl && baseUrl !== OFFICIAL_BASE_URLS[input.provider]) {
@@ -225,45 +100,27 @@ export function validateUserAiConfig(input: { provider: AiProvider; baseUrl: str
   return { provider: input.provider, baseUrl, model: input.model };
 }
 
+function parseAllowedBaseUrls(raw: string, provider: AiProvider) {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("USER_AI_ALLOWED_BASE_URLS 必须是 JSON 数组。");
+  }
+  if (!Array.isArray(parsed) || !parsed.every((value) => typeof value === "string")) throw new Error("USER_AI_ALLOWED_BASE_URLS 必须是 URL 字符串数组。");
+  return new Set(parsed.map((value) => normalizeBaseUrl(value, provider)));
+}
+
 function validateConnectionPreset(preset: UserAiConnectionPreset) {
   const baseUrl = normalizeBaseUrl(preset.baseUrl, preset.provider);
   if (preset.provider === "openai-compatible") {
     const allowlist = process.env.USER_AI_ALLOWED_BASE_URLS;
     if (allowlist) {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(allowlist);
-      } catch {
-        throw new Error("USER_AI_ALLOWED_BASE_URLS 必须是 JSON 数组。");
-      }
-      if (!Array.isArray(parsed) || !parsed.every((value) => typeof value === "string")) throw new Error("USER_AI_ALLOWED_BASE_URLS 必须是 URL 字符串数组。");
-      const allowed = new Set(parsed.map((value) => normalizeBaseUrl(value, preset.provider)));
+      const allowed = parseAllowedBaseUrls(allowlist, preset.provider);
       if (!allowed.has(baseUrl)) throw new RequestError("该连接方案未获管理员授权。", 403);
     }
   }
   return validateUserAiConfig(preset);
-}
-
-export function encryptApiKey(apiKey: string) {
-  const keyring = getEncryptionKeyring();
-  const key = keyring.keys.get(keyring.activeKeyId)!;
-  const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", key, iv);
-  const ciphertext = Buffer.concat([cipher.update(apiKey, "utf8"), cipher.final()]);
-  return {
-    apiKeyCiphertext: ciphertext.toString("base64url"),
-    apiKeyIv: iv.toString("base64url"),
-    apiKeyAuthTag: cipher.getAuthTag().toString("base64url"),
-    encryptionKeyId: keyring.activeKeyId,
-  };
-}
-
-export function decryptApiKey(encrypted: Pick<typeof userAiConfigs.$inferSelect, "apiKeyCiphertext" | "apiKeyIv" | "apiKeyAuthTag" | "encryptionKeyId">) {
-  const key = getEncryptionKeyring().keys.get(encrypted.encryptionKeyId);
-  if (!key) throw new Error("找不到用于解密用户模型 API Key 的密钥。");
-  const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(encrypted.apiKeyIv, "base64url"));
-  decipher.setAuthTag(Buffer.from(encrypted.apiKeyAuthTag, "base64url"));
-  return Buffer.concat([decipher.update(Buffer.from(encrypted.apiKeyCiphertext, "base64url")), decipher.final()]).toString("utf8");
 }
 
 function toPublicConfig(row: typeof userAiConfigs.$inferSelect): PublicUserAiConfig {
@@ -327,7 +184,7 @@ export async function saveUserAiConfig(userId: string, input: UserAiConfigInput 
   if (!apiKey && !existing[0]) throw new RequestError("首次保存必须填写 API Key。");
 
   let encrypted = apiKey ? encryptApiKey(apiKey) : existing[0]!;
-  if (!apiKey && existing[0] && existing[0].encryptionKeyId !== getEncryptionKeyring().activeKeyId) {
+  if (!apiKey && existing[0] && existing[0].encryptionKeyId !== getActiveEncryptionKeyId()) {
     encrypted = encryptApiKey(decryptApiKey(existing[0]));
   }
   const values = {
@@ -364,8 +221,7 @@ export async function getUserAiModelConfig(userId: string): Promise<UserAiModelC
     { allowUnlistedCompatibleUrl: row.connectionPresetId === CUSTOM_USER_AI_PRESET_ID },
   );
   const apiKey = decryptApiKey(row);
-  const activeKeyId = getEncryptionKeyring().activeKeyId;
-  if (row.encryptionKeyId !== activeKeyId) {
+  if (row.encryptionKeyId !== getActiveEncryptionKeyId()) {
     const reencrypted = encryptApiKey(apiKey);
     await getDb().update(userAiConfigs).set(reencrypted).where(eq(userAiConfigs.id, row.id));
   }

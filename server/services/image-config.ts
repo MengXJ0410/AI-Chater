@@ -3,7 +3,8 @@ import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/server/db";
 import { imageGenerations, userImageConfigs, users } from "@/server/db/schema";
 import { RequestError } from "@/server/http/errors";
-import { decryptApiKey, encryptApiKey, getActiveEncryptionKeyId, normalizeBaseUrl } from "@/server/services/user-ai-config";
+import { decryptApiKey, encryptApiKey, getActiveEncryptionKeyId } from "@/server/security/api-key-crypto";
+import { normalizeBaseUrl } from "@/server/security/url-safety";
 import type { z } from "zod";
 import type { imageConfigSchema } from "@/shared/validators";
 

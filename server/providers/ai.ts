@@ -9,7 +9,7 @@ import { getAiPresets, type AiPreset } from "@/server/config";
 import type { AiProvider } from "@/shared/config";
 import { readImage } from "@/server/services/uploads";
 import type { MessagePart } from "@/shared/messages";
-import { assertSafeResolvedRequestUrl } from "@/server/services/user-ai-config";
+import { assertSafeResolvedRequestUrl } from "@/server/security/url-safety";
 
 export function getPreset(id: string) {
   return getAiPresets().find((preset) => preset.id === id);
