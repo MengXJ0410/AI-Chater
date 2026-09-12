@@ -3,7 +3,7 @@ import argon2 from "argon2";
 import { eq } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/db";
-import { sessions, users } from "@/lib/db/schema";
+import { companionRuntimeTokens, sessions, users } from "@/lib/db/schema";
 import { getSessionTtlDays } from "@/lib/config";
 import { avatarUrl } from "@/lib/avatar";
 
@@ -48,7 +48,11 @@ export async function deleteSession() {
   const token = cookieStore.get(SESSION_COOKIE)?.value;
   try {
     if (token) {
-      await getDb().delete(sessions).where(eq(sessions.tokenHash, hashToken(token)));
+      const session = await getDb().select({ id: sessions.id }).from(sessions).where(eq(sessions.tokenHash, hashToken(token))).limit(1);
+      if (session[0]) {
+        await getDb().delete(companionRuntimeTokens).where(eq(companionRuntimeTokens.sessionId, session[0].id));
+        await getDb().delete(sessions).where(eq(sessions.id, session[0].id));
+      }
     }
   } finally {
     cookieStore.delete(SESSION_COOKIE);
@@ -60,6 +64,11 @@ export async function clearSessionCookie() {
 }
 
 export async function getCurrentUser() {
+  const session = await getCurrentSession();
+  return session?.user ?? null;
+}
+
+export async function getCurrentSession() {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return null;
 
@@ -85,7 +94,10 @@ export async function getCurrentUser() {
     return null;
   }
 
-  return { id: session.id, username: session.username, avatarUrl: avatarUrl(session.avatarStorageKey ? session.avatarUpdatedAt : null) };
+  return {
+    sessionId: session.sessionId,
+    user: { id: session.id, username: session.username, avatarUrl: avatarUrl(session.avatarStorageKey ? session.avatarUpdatedAt : null) },
+  };
 }
 
 export async function requireUser() {

@@ -4,6 +4,7 @@ title AI Chater Launcher
 
 cd /d "%~dp0"
 set "APP_URL=http://localhost:3000"
+set "AIRI_URL=http://localhost:5173"
 
 where node >nul 2>nul
 if errorlevel 1 (
@@ -43,6 +44,12 @@ if errorlevel 1 (
 
 echo Starting image generation worker...
 start "AI Chater Image Worker" /D "%~dp0" cmd /c "npm run image:worker"
+
+powershell -NoProfile -Command "if (Get-NetTCPConnection -LocalPort 5173 -State Listen -ErrorAction SilentlyContinue) { exit 0 } exit 1"
+if errorlevel 1 (
+  echo Starting AIRI Stage Web runtime...
+  start "AIRI Stage Web" /D "%~dp0" powershell -NoProfile -ExecutionPolicy Bypass -NoExit -File "%~dp0integrations\airi\scripts\start-stage-web.ps1"
+)
 
 echo Waiting for AI Chater...
 set /a ATTEMPTS=0

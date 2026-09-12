@@ -1,0 +1,8 @@
+import { NextResponse } from "next/server";
+import { routeError } from "@/lib/api";
+import { requireUser } from "@/lib/auth";
+import { assertSameOrigin } from "@/lib/http";
+import { cancelVideoGeneration, getPublicVideoGeneration } from "@/lib/video-generation";
+export const runtime = "nodejs";
+export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) { try { const user = await requireUser(); const row = await getPublicVideoGeneration(user.id, (await context.params).id); if (!row) return NextResponse.json({ error: "视频任务不存在。" }, { status: 404 }); return NextResponse.json({ generation: row }); } catch (error) { return routeError(error); } }
+export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) { try { assertSameOrigin(request); const user = await requireUser(); return NextResponse.json({ generation: await cancelVideoGeneration(user.id, (await context.params).id) }); } catch (error) { return routeError(error); } }

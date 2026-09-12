@@ -100,9 +100,12 @@ npm run start        # 运行生产构建
 npm run lint         # ESLint
 npm run test         # 单元测试
 npm run image:worker # 异步生图任务 worker
+npm run airi:dev      # 准备并启动固定版本 AIRI Stage Web（端口 5173）
 npm run db:generate  # 从 schema 生成 migration
 npm run db:migrate   # 执行 migration
 ```
+
+登录后访问 `/companion` 进入 AIRI Companion。首次接入前先执行 `npm run db:migrate`，再执行 `npm run airi:dev`；AIRI 固定版本、bridge 和升级说明位于 `integrations/airi`，源码 checkout 只保存在被 Git 忽略的 `.runtime/airi`。
 
 账号管理接口：`PATCH /api/me/password` 修改密码（请求体为 `currentPassword`、`newPassword`），`DELETE /api/me` 软删除当前账号（请求体为 `password`）。软删除会撤销全部会话、保留历史聊天和图片数据，并释放原用户名供重新注册。
 

@@ -1,0 +1,11 @@
+diff --git a/apps/stage-web/src/main.ts b/apps/stage-web/src/main.ts
+index 6cc3c37..a7a8d51 100644
+--- a/apps/stage-web/src/main.ts
++++ b/apps/stage-web/src/main.ts
+@@ -17,6 +17,7 @@ import { createRouter, createWebHashHistory, createWebHistory } from 'vue-router'
+ import { routes } from 'vue-router/auto-routes'
+ 
+ import App from './App.vue'
++import './integrations/companion-bridge'
+ 
+ import { i18n } from './modules/i18n'

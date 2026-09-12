@@ -18,7 +18,7 @@ export async function POST(request: Request) {
     const user = await requireUser();
     const { conversationId, presetId, text, attachmentIds } = chatSchema.parse(await request.json());
     const conversation = await getDb().select().from(conversations)
-      .where(and(eq(conversations.id, conversationId), eq(conversations.userId, user.id))).limit(1);
+      .where(and(eq(conversations.id, conversationId), eq(conversations.userId, user.id), eq(conversations.kind, "chat"))).limit(1);
     if (!conversation[0]) return errorResponse("会话不存在。", 404);
 
     const systemPreset = getPreset(presetId);

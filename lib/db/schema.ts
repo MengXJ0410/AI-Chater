@@ -73,8 +73,38 @@ export const conversations = mysqlTable("conversations", {
   id: varchar("id", { length: 36 }).primaryKey(),
   userId: varchar("user_id", { length: 36 }).notNull().references(() => users.id, { onDelete: "cascade" }),
   title: varchar("title", { length: 120 }).notNull(),
+  kind: mysqlEnum("kind", ["chat", "companion"]).notNull().default("chat"),
   ...timestamps,
-}, (table) => [index("conversations_user_updated_idx").on(table.userId, table.updatedAt)]);
+}, (table) => [
+  index("conversations_user_updated_idx").on(table.userId, table.updatedAt),
+  index("conversations_user_kind_updated_idx").on(table.userId, table.kind, table.updatedAt),
+]);
+
+export const companionLaunchTickets = mysqlTable("companion_launch_tickets", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  userId: varchar("user_id", { length: 36 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  sessionId: varchar("session_id", { length: 36 }).notNull().references(() => sessions.id, { onDelete: "cascade" }),
+  tokenHash: varchar("token_hash", { length: 64 }).notNull().unique(),
+  nonce: varchar("nonce", { length: 64 }).notNull(),
+  target: varchar("target", { length: 120 }).notNull(),
+  expiresAt: datetime("expires_at", { mode: "date" }).notNull(),
+  consumedAt: datetime("consumed_at", { mode: "date" }),
+  createdAt: timestamps.createdAt,
+}, (table) => [
+  index("companion_launch_user_expires_idx").on(table.userId, table.expiresAt),
+]);
+
+export const companionRuntimeTokens = mysqlTable("companion_runtime_tokens", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  userId: varchar("user_id", { length: 36 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  sessionId: varchar("session_id", { length: 36 }).notNull().references(() => sessions.id, { onDelete: "cascade" }),
+  tokenHash: varchar("token_hash", { length: 64 }).notNull().unique(),
+  expiresAt: datetime("expires_at", { mode: "date" }).notNull(),
+  revokedAt: datetime("revoked_at", { mode: "date" }),
+  createdAt: timestamps.createdAt,
+}, (table) => [
+  index("companion_runtime_user_expires_idx").on(table.userId, table.expiresAt),
+]);
 
 export const messages = mysqlTable("messages", {
   id: varchar("id", { length: 36 }).primaryKey(),
@@ -114,6 +144,56 @@ export const imageGenerations = mysqlTable("image_generations", {
   index("image_generations_queue_idx").on(table.status, table.createdAt),
   uniqueIndex("image_generations_user_request_unique").on(table.userId, table.requestId),
 ]);
+
+export const userVideoConfigs = mysqlTable("user_video_configs", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  userId: varchar("user_id", { length: 36 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 80 }).notNull(),
+  comfyBaseUrl: varchar("comfy_base_url", { length: 512 }).notNull(),
+  comfyToken: text("comfy_token"),
+  workflowDir: varchar("workflow_dir", { length: 512 }).notNull(),
+  rewriteEnabled: int("rewrite_enabled", { unsigned: true }).notNull().default(0),
+  rewriteBaseUrl: varchar("rewrite_base_url", { length: 512 }),
+  rewriteModel: varchar("rewrite_model", { length: 160 }),
+  rewriteApiKey: text("rewrite_api_key"),
+  defaultWidth: int("default_width", { unsigned: true }).notNull().default(576),
+  defaultHeight: int("default_height", { unsigned: true }).notNull().default(320),
+  defaultFrames: int("default_frames", { unsigned: true }).notNull().default(49),
+  defaultFps: int("default_fps", { unsigned: true }).notNull().default(8),
+  defaultSteps: int("default_steps", { unsigned: true }).notNull().default(20),
+  ...timestamps,
+}, (table) => [index("user_video_configs_user_updated_idx").on(table.userId, table.updatedAt)]);
+
+export const videoGenerations = mysqlTable("video_generations", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  requestId: varchar("request_id", { length: 36 }).notNull(),
+  requestHash: varchar("request_hash", { length: 64 }).notNull(),
+  userId: varchar("user_id", { length: 36 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  conversationId: varchar("conversation_id", { length: 36 }).notNull().references(() => conversations.id, { onDelete: "cascade" }),
+  userMessageId: varchar("user_message_id", { length: 36 }).notNull().references(() => messages.id, { onDelete: "cascade" }),
+  assistantMessageId: varchar("assistant_message_id", { length: 36 }),
+  videoConfigId: varchar("video_config_id", { length: 36 }).references(() => userVideoConfigs.id, { onDelete: "set null" }),
+  videoPresetId: varchar("video_preset_id", { length: 64 }).notNull(),
+  mode: mysqlEnum("mode", ["text-to-video", "image-to-video", "text-image-to-video"]).notNull(),
+  model: varchar("model", { length: 160 }).notNull().default("Wan2.1"),
+  prompt: text("prompt").notNull(),
+  rewrittenPrompt: text("rewritten_prompt"),
+  negativePrompt: text("negative_prompt"),
+  shotPlan: text("shot_plan"),
+  referenceAttachmentIds: json("reference_attachment_ids").$type<string[]>().notNull(),
+  width: int("width", { unsigned: true }).notNull(),
+  height: int("height", { unsigned: true }).notNull(),
+  frames: int("frames", { unsigned: true }).notNull(),
+  fps: int("fps", { unsigned: true }).notNull(),
+  steps: int("steps", { unsigned: true }).notNull(),
+  comfyPromptId: varchar("comfy_prompt_id", { length: 128 }),
+  workflowVersion: varchar("workflow_version", { length: 64 }),
+  status: mysqlEnum("status", ["queued", "running", "completed", "failed", "cancel_requested", "cancelled"]).notNull(),
+  errorCode: varchar("error_code", { length: 64 }),
+  startedAt: datetime("started_at", { mode: "date" }),
+  completedAt: datetime("completed_at", { mode: "date" }),
+  ...timestamps,
+}, (table) => [index("video_generations_queue_idx").on(table.status, table.createdAt), index("video_generations_user_created_idx").on(table.userId, table.createdAt), uniqueIndex("video_generations_user_request_unique").on(table.userId, table.requestId)]);
 
 export const modelConfigAuditEvents = mysqlTable("model_config_audit_events", {
   id: varchar("id", { length: 36 }).primaryKey(),

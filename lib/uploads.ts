@@ -62,6 +62,19 @@ export async function readImage(storageKey: string) {
   return readFile(uploadPath(storageKey));
 }
 
+export async function saveGeneratedVideo(input: Uint8Array, mediaType = "video/mp4") {
+  const max = Number(process.env.VIDEO_MAX_OUTPUT_BYTES ?? 209715200);
+  if (!input.length || input.byteLength > max) throw new RequestError("生成视频超过大小限制。", 502);
+  const extension = mediaType.includes("webm") ? "webm" : "mp4";
+  const storageKey = `${randomUUID()}.${extension}`;
+  const destination = uploadPath(storageKey);
+  await mkdir(path.dirname(destination), { recursive: true });
+  await writeFile(destination, Buffer.from(input));
+  return { storageKey, mimeType: mediaType, size: input.byteLength };
+}
+
+export const readMedia = readImage;
+
 export async function removeImages(storageKeys: string[]) {
   await Promise.all(storageKeys.map(async (storageKey) => {
     await rm(uploadPath(storageKey), { force: true });

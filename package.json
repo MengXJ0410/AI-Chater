@@ -10,7 +10,9 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "airi:dev": "powershell -NoProfile -ExecutionPolicy Bypass -File integrations/airi/scripts/start-stage-web.ps1",
     "image:worker": "tsx scripts/image-worker.ts",
+    "video:worker": "tsx scripts/video-worker.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate"
   },

@@ -9,6 +9,7 @@ import { Markdown } from "@/components/markdown";
 import { ChatAmbientLayer } from "@/components/chat-ambient-layer";
 import { UserAvatar } from "@/components/user-avatar";
 import { ImageWorkspace } from "@/components/image-workspace";
+import { VideoWorkspace } from "@/components/video-workspace";
 import { SavedConfigList } from "@/components/saved-config-list";
 import { CHAT_BACKGROUND_CHANGE_EVENT, CHAT_BACKGROUND_STORAGE_KEY } from "@/lib/appearance";
 import { CHAT_ENTRY_READY_EVENT, CHAT_ENTRY_STORAGE_KEY, isPendingChatEntry } from "@/lib/chat-entry-transition";
@@ -641,6 +642,9 @@ export function ChatClient({ user }: { user: User }) {
           <div className="chat-section-heading chat-sidebar-label">功能</div>
           <nav className="chat-tool-nav" aria-label="功能导航">
             {TOOL_ITEMS.map((item) => { const Icon = item.icon; return <button className={`chat-tool-item ${activeTool === item.id ? "is-active" : ""}`} key={item.id} onClick={() => selectTool(item.id)} title={item.label} aria-current={activeTool === item.id ? "page" : undefined}><Icon size={18} /><span className="chat-sidebar-label">{item.label}</span></button>; })}
+            <Link className="chat-tool-item chat-tool-link" href="/companion" title="AIRI" onClick={() => setIsSidebarOpen(false)}>
+              <Bot size={18} /><span className="chat-sidebar-label">AIRI</span>
+            </Link>
           </nav>
           {activeTool === "chat" ? <section className="chat-history-section" aria-label="会话列表">
             <div className="chat-section-heading chat-sidebar-label"><span>最近会话</span><button className="chat-icon-button" title="新建会话" aria-label="新建会话" onClick={() => createConversation().catch((cause) => setError(cause instanceof Error ? cause.message : "新建会话失败。"))} disabled={isSending}><MessageSquarePlus size={16} /></button></div>
@@ -669,7 +673,7 @@ export function ChatClient({ user }: { user: User }) {
           <div className="chat-toolbar-actions">{activeTool === "chat" ? <select className="model-select" value={presetId} onChange={(event) => choosePreset(event.target.value)} disabled={!presets.length || isSending}>{presets.length ? presets.map((preset) => <option value={preset.id} key={preset.id}>{preset.label} · {preset.model}</option>) : <option value="">未配置模型</option>}</select> : null}<button className="chat-account-trigger" title="账号面板" aria-label="打开账号面板" aria-expanded={isAccountPanelOpen} onClick={() => setIsAccountPanelOpen((current) => !current)}><UserAvatar className="chat-avatar" username={user.username} src={user.avatarUrl} /><span className="chat-account-trigger-name">{user.username}</span></button></div>
         </header>
 
-        {activeTool === "image" ? <ImageWorkspace configRevision={imageConfigRevision} preferredPresetId={preferredImagePresetId} onPreferredPresetChange={(id) => { setPreferredImagePresetId(id); window.localStorage.setItem(IMAGE_PRESET_STORAGE_KEY, id); }} conversationId={activeConversationId} ensureConversation={async () => activeConversationId ?? createConversation()} onOpenConfig={() => { setConfigView("editor"); setEditingConfigId(null); setConfigTab("image"); setIsConfigDrawerOpen(true); }} /> : activeTool !== "chat" ? <div className="chat-placeholder"><div className="chat-placeholder-icon"><MoreHorizontal size={26} /></div><span className="chat-tool-eyebrow">{activeToolMeta.label}</span><h2>{activeToolMeta.description}</h2><p>这个功能正在准备中，之后会在这里成为你的新工作窗口。</p><button className="chat-primary-button" onClick={() => selectTool("chat")}><Command size={16} />返回对话</button></div> : <div className="chat-conversation-workspace">
+        {activeTool === "video" ? <VideoWorkspace conversationId={activeConversationId} ensureConversation={async () => activeConversationId ?? createConversation()} onOpenConfig={() => setIsConfigDrawerOpen(true)} /> : activeTool === "image" ? <ImageWorkspace configRevision={imageConfigRevision} preferredPresetId={preferredImagePresetId} onPreferredPresetChange={(id) => { setPreferredImagePresetId(id); window.localStorage.setItem(IMAGE_PRESET_STORAGE_KEY, id); }} conversationId={activeConversationId} ensureConversation={async () => activeConversationId ?? createConversation()} onOpenConfig={() => { setConfigView("editor"); setEditingConfigId(null); setConfigTab("image"); setIsConfigDrawerOpen(true); }} /> : activeTool !== "chat" ? <div className="chat-placeholder"><div className="chat-placeholder-icon"><MoreHorizontal size={26} /></div><span className="chat-tool-eyebrow">{activeToolMeta.label}</span><h2>{activeToolMeta.description}</h2><p>这个功能正在准备中，之后会在这里成为你的新工作窗口。</p><button className="chat-primary-button" onClick={() => selectTool("chat")}><Command size={16} />返回对话</button></div> : <div className="chat-conversation-workspace">
           <div className="message-scroll" ref={messageListRef}><div className="message-stream">
             {!messages.length ? <div className="empty-chat-state"><span><Sparkles size={22} /></span><strong>开始一段新对话</strong><small>输入问题，或从左侧切换其他工作功能。</small></div> : null}
             {messages.map((message) => <MessageView message={message} user={user} key={message.id} />)}

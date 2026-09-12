@@ -56,6 +56,20 @@ export const chatSchema = z.object({
   message: "请输入消息或添加图片。",
 });
 
+export const companionGenerateSchema = z.object({
+  conversationId: z.string().uuid(),
+  modelConfigId: z.string().uuid(),
+  text: z.string().trim().min(1, "请输入消息。").max(16000, "消息不能超过 16000 个字符。"),
+}).strict();
+
+export const companionConversationSchema = z.object({
+  title: z.string().trim().min(1).max(120).default("猫娘陪伴"),
+}).strict();
+
+export const companionExchangeSchema = z.object({
+  ticket: z.string().trim().min(1).max(256),
+}).strict();
+
 export const imageProviderSchema = z.enum(["xai-compatible", "openai-compatible"]);
 export const imageResolutionSchema = z.enum(["1k", "2k"]);
 export const imageQualitySchema = z.enum(["low", "medium", "high"]);
@@ -111,3 +125,24 @@ export const imageGenerationSchema = z.object({
 }).strict().superRefine((value, context) => {
   if (value.referenceAttachmentIds.length) context.addIssue({ code: "custom", path: ["referenceAttachmentIds"], message: "首期暂不支持参考图编辑。" });
 });
+
+export const videoModeSchema = z.enum(["text-to-video", "image-to-video", "text-image-to-video"]);
+export const videoGenerationSchema = z.object({
+  requestId: z.string().uuid(), conversationId: z.string().uuid(), videoPresetId: z.string().min(1).max(64), mode: videoModeSchema,
+  prompt: z.string().trim().min(1, "请输入视频提示词。").max(4000),
+  referenceAttachmentIds: z.array(z.string().uuid()).max(1).default([]),
+  width: z.number().int().min(256).max(1024).default(576), height: z.number().int().min(256).max(1024).default(320),
+  frames: z.number().int().min(17).max(97).default(49), fps: z.number().int().min(4).max(24).default(8), steps: z.number().int().min(8).max(40).default(20),
+  source: z.literal("video-mode").default("video-mode"),
+}).strict().superRefine((value, context) => {
+  if (value.mode === "image-to-video" && value.referenceAttachmentIds.length !== 1) context.addIssue({ code: "custom", path: ["referenceAttachmentIds"], message: "图生视频必须上传 1 张参考图。" });
+  if (value.mode === "text-to-video" && value.referenceAttachmentIds.length) context.addIssue({ code: "custom", path: ["referenceAttachmentIds"], message: "文生视频不接受参考图。" });
+});
+
+export const videoConfigSchema = z.object({
+  name: z.string().trim().min(1).max(80), comfyBaseUrl: z.string().url().max(512), comfyToken: z.string().max(4096).optional(),
+  workflowDir: z.string().trim().min(1).max(512).default("./data/comfyui-workflows"), rewriteEnabled: z.boolean().default(false),
+  rewriteBaseUrl: z.string().url().max(512).optional(), rewriteModel: z.string().max(160).optional(), rewriteApiKey: z.string().max(4096).optional(),
+  defaultWidth: z.number().int().min(256).max(1024).default(576), defaultHeight: z.number().int().min(256).max(1024).default(320),
+  defaultFrames: z.number().int().min(17).max(97).default(49), defaultFps: z.number().int().min(4).max(24).default(8), defaultSteps: z.number().int().min(8).max(40).default(20),
+}).strict();

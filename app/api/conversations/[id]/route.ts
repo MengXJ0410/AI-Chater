@@ -10,7 +10,7 @@ import { removeImages } from "@/lib/uploads";
 
 async function getConversation(id: string, userId: string) {
   const item = await getDb().select().from(conversations)
-    .where(and(eq(conversations.id, id), eq(conversations.userId, userId))).limit(1);
+    .where(and(eq(conversations.id, id), eq(conversations.userId, userId), eq(conversations.kind, "chat"))).limit(1);
   return item[0] ?? null;
 }
 
