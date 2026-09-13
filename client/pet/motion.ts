@@ -97,6 +97,7 @@ export function createSpiderState(viewport: { width: number; height: number }): 
     vx: 0,
     vy: 0,
     legPhase: 0,
+    stepClock: 0,
     heading,
     headingTarget: heading,
     headingTimer: 0,
@@ -121,21 +122,34 @@ export function strideTarget(
   vy: number,
   maxReach: number,
 ): Point {
+  const tuning = getSpiderTuning();
   const speed = Math.hypot(vx, vy);
   if (speed < 1) return rest;
-  const forward = maxReach * getSpiderTuning().stride * legStrideFactor(leg) * (0.4 + Math.min(1, speed / 200));
+  const gaitRate = Math.min(3, speed / tuning.gaitReference);
+  const forward = maxReach * tuning.stride * legStrideFactor(leg) * (0.4 + tuning.strideSpeedGain * gaitRate);
   return { x: rest.x + (vx / speed) * forward, y: rest.y + (vy / speed) * forward };
+}
+
+function clampToReach(hip: Point, target: Point, maxDistance: number): Point {
+  const dx = target.x - hip.x;
+  const dy = target.y - hip.y;
+  const distance = Math.hypot(dx, dy) || 1;
+  if (distance <= maxDistance) return target;
+  return { x: hip.x + (dx / distance) * maxDistance, y: hip.y + (dy / distance) * maxDistance };
 }
 
 function stepLegs(
   legs: SpiderLegState[],
   state: SpiderState,
   dt: number,
-  random: () => number,
-  activityScale: number,
   pivot: boolean,
 ): SpiderLegState[] {
   const moving = state.status === "wander" || state.status === "chase" || state.status === "evade";
+  const tuning = getSpiderTuning();
+  const speed = Math.hypot(state.vx, state.vy);
+  const gaitRate = Math.min(3, speed / tuning.gaitReference);
+  const swingDuration = Math.max(0.04, tuning.swingDuration / (1 + tuning.swingSpeedGain * gaitRate));
+  const stepAngle = Math.min(tuning.maxStepAngle, tuning.stepAngle + tuning.angleSpeedGain * gaitRate);
   return SPIDER_LEGS.map((leg, index) => {
     const previous = legs[index] ?? createLegState(leg, state.x, state.y, state.heading);
     const hip = hipPoint(leg, state.x, state.y, state.heading);
@@ -144,16 +158,19 @@ function stepLegs(
     const rest = restFootPoint(leg, state.x, state.y, state.heading, reachScale);
 
     if (state.status === "drag") {
-      const jitter = (random() - 0.5) * 16;
-      const target = { x: rest.x + jitter, y: rest.y + jitter * 0.6 };
+      const swing = (previous.swing + dt * 4.5) % 1;
+      const flutter = Math.sin(swing * Math.PI * 2 + index * 0.9) * 7;
+      const reach = maxReach * 0.8;
+      const outward = legOutwardDirection(leg, state.heading);
+      const target = { x: hip.x + outward.x * (reach + flutter), y: hip.y + outward.y * (reach + flutter) };
       return {
         ...previous,
         planted: false,
-        swing: (previous.swing + dt * 7) % 1,
+        swing,
         footX: target.x,
         footY: target.y,
-        stepFromX: target.x,
-        stepFromY: target.y,
+        stepFromX: previous.footX,
+        stepFromY: previous.footY,
         stepToX: target.x,
         stepToY: target.y,
       };
@@ -181,10 +198,11 @@ function stepLegs(
       const footAngle = Math.atan2(previous.footY - hip.y, previous.footX - hip.x);
       const restAngle = Math.atan2(rest.y - hip.y, rest.x - hip.x);
       const angleError = Math.abs(normalizeAngle(footAngle - restAngle));
-      const tuning = getSpiderTuning();
-      const shouldStep = pivot || (moving && (reach > maxReach * tuning.stepReach || angleError > tuning.stepAngle)) || tooFar;
+      const inWindow = ((state.stepClock + leg.waveOffset) % 1 + 1) % 1 < tuning.waveWindow;
+      const shouldStep = pivot || tooFar || (moving && inWindow && (reach > maxReach * tuning.stepReach || angleError > stepAngle));
       if (shouldStep) {
-        const stepTo = strideTarget(leg, rest, state.vx, state.vy, maxReach);
+        const target = strideTarget(leg, rest, state.vx, state.vy, maxReach);
+        const stepTo = clampToReach(hip, target, maxReach * 0.85);
         return {
           ...previous,
           planted: false,
@@ -203,7 +221,6 @@ function stepLegs(
       };
     }
 
-    const swingDuration = getSpiderTuning().swingDuration / Math.max(0.6, 0.5 + activityScale * 0.5);
     const swing = previous.swing + dt / swingDuration;
     if (swing >= 1) {
       return { ...previous, planted: true, swing: 0, footX: previous.stepToX, footY: previous.stepToY };
@@ -379,21 +396,24 @@ export function stepSpider(state: SpiderState, input: PetInput): SpiderState {
   const clampedX = clamp(x, minimumX, maximumX);
   const clampedY = clamp(y, minimumY, ground);
   if (clampedX !== x) {
-    heading = clampedX < x ? 0 : Math.PI;
+    heading = clampedX < x ? Math.PI : 0;
     headingTarget = heading;
-    headingTimer = 600;
+    headingTimer = 500;
     vx = 0;
   }
   if (clampedY !== y) {
-    heading = clampedY < y ? Math.PI / 2 : -Math.PI / 2;
+    heading = clampedY < y ? -Math.PI / 2 : Math.PI / 2;
     headingTarget = heading;
-    headingTimer = 600;
+    headingTimer = 500;
     vy = 0;
   }
   x = clampedX;
   y = clampedY;
 
   const pivot = Math.abs(normalizeAngle(heading - state.heading)) > getSpiderTuning().pivotAngle;
+
+  const moved = Math.hypot(x - state.x, y - state.y);
+  const stepClock = (state.stepClock + moved / getSpiderTuning().waveStride) % 1;
 
   const next: SpiderState = {
     status,
@@ -402,6 +422,7 @@ export function stepSpider(state: SpiderState, input: PetInput): SpiderState {
     vx,
     vy,
     legPhase: state.legPhase + dt * (1.5 + Math.min(6, Math.hypot(vx, vy) / 18)),
+    stepClock,
     heading,
     headingTarget,
     headingTimer,
@@ -411,6 +432,6 @@ export function stepSpider(state: SpiderState, input: PetInput): SpiderState {
     webAnchor,
     legs: state.legs,
   };
-  next.legs = stepLegs(state.legs, next, dt, random, activityScale, pivot);
+  next.legs = stepLegs(state.legs, next, dt, pivot);
   return next;
 }

@@ -25,6 +25,7 @@ export type SpiderState = {
   vx: number;
   vy: number;
   legPhase: number;
+  stepClock: number;
   heading: number;
   headingTarget: number;
   headingTimer: number;

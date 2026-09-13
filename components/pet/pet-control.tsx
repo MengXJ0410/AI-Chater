@@ -221,6 +221,19 @@ export function PetControl() {
           <TuneSlider label="急转阈值" value={tuning.pivotAngle} min={0} max={3.14} step={0.02} format={(value) => value.toFixed(2)} onChange={(pivotAngle) => changeTuning({ pivotAngle })} />
 
           <div className="appearance-divider" />
+          <div className="appearance-panel-header"><span>高速适应</span></div>
+          <TuneSlider label="参考速度" value={tuning.gaitReference} min={40} max={400} step={5} format={(value) => `${value}`} onChange={(gaitReference) => changeTuning({ gaitReference })} />
+          <TuneSlider label="收腿增益" value={tuning.swingSpeedGain} min={0} max={3} step={0.05} format={(value) => value.toFixed(2)} onChange={(swingSpeedGain) => changeTuning({ swingSpeedGain })} />
+          <TuneSlider label="步幅增益" value={tuning.strideSpeedGain} min={0} max={3} step={0.05} format={(value) => value.toFixed(2)} onChange={(strideSpeedGain) => changeTuning({ strideSpeedGain })} />
+          <TuneSlider label="转动增益" value={tuning.angleSpeedGain} min={0} max={3} step={0.05} format={(value) => value.toFixed(2)} onChange={(angleSpeedGain) => changeTuning({ angleSpeedGain })} />
+          <TuneSlider label="转动上限" value={tuning.maxStepAngle} min={0.5} max={3.14} step={0.05} format={(value) => value.toFixed(2)} onChange={(maxStepAngle) => changeTuning({ maxStepAngle })} />
+
+          <div className="appearance-divider" />
+          <div className="appearance-panel-header"><span>步态协调</span></div>
+          <TuneSlider label="波浪步长" value={tuning.waveStride} min={10} max={160} step={1} format={(value) => `${value}px`} onChange={(waveStride) => changeTuning({ waveStride })} />
+          <TuneSlider label="抬脚窗口" value={tuning.waveWindow} min={0.1} max={1} step={0.05} format={(value) => value.toFixed(2)} onChange={(waveWindow) => changeTuning({ waveWindow })} />
+
+          <div className="appearance-divider" />
           <div className="appearance-panel-header">
             <span>参数预设</span>
             <div className="appearance-actions">

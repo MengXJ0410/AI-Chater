@@ -46,6 +46,15 @@
 | `swingDuration` | 单次摆动基础时长（秒，越小步频越快） | 0.06–0.4 |
 | `stride` | 全局基础步幅（所有腿沿运动方向前伸的基准） | 0–2 |
 | `pivotAngle` | 单帧朝向变化超过该弧度时所有落点作废重摆，修复急转时后腿挂在身后的问题 | 0–π |
+| `gaitReference` | 高速自适应参考速度（px/s） | 40–400 |
+| `swingSpeedGain` | 摆动时长随速度收缩增益（高速收腿更快） | 0–3 |
+| `strideSpeedGain` | 步幅随速度增长增益 | 0–3 |
+| `angleSpeedGain` | 转身阈值随速度增长增益 | 0–3 |
+| `maxStepAngle` | 自适应转身阈值上限（弧度） | 0.5–π |
+| `waveStride` | 波浪步态一个周期对应的地面位移（px） | 10–160 |
+| `waveWindow` | 波浪步态中允许抬脚的时间窗口占比 | 0.1–1 |
+
+高速爬行与波浪步态：`stepLegs` 按当前速度派生摆动时长/步幅/转身阈值（`gaitRate = speed / gaitReference`），落脚点夹紧在 `0.85·maxReach` 内；`SpiderState.stepClock` 按位移推进，配合每腿 `waveOffset` 只在相位窗口内抬脚，形成依次迈步的波浪。实测把追击/躲避的支撑相占比从 16%/29% 提升到约 76%/75%。
 
 运行时覆盖与预设：
 
@@ -159,7 +168,7 @@ export function stepSpider(state: SpiderState, input: PetInput): SpiderState;
 - **chase（追击）**：1 秒内左键点击任意处 ≥5 次触发（受 `chaseCursor` 开关控制）；快速转向鼠标并高速靠近，到达（< 0.75 自身长度）或超过 3.5 秒后转入 evade。
 - **evade（躲避）**：wander 时鼠标进入自身长度（`SPIDER_LENGTH`）以内立即触发，背向鼠标逃离；距离超过自身长度 3 倍后回到 wander。点击蜘蛛也会进入 evade（惊慌）。
 - **sleep（睡觉）**：连续闲逛满 5 分钟（`SPIDER_SLEEP_AFTER_MS`）进入，腿收缩静止；点击蜘蛛唤醒并进入 evade，快速连点则进入 chase。
-- **drag / fall**：拖动挣扎、松手重力下落，高处会挂蛛丝摆动衰减，落地回到 wander。
+- **drag / fall**：拖动挣扎（按摆动相位平滑扑动，不逐帧随机）、松手重力下落，高处会挂蛛丝摆动衰减，落地回到 wander。撞到视口边界时朝内侧转向，不会卡死在边界。
 
 `PetInput` 相应新增 `chaseCursor`、`chaseTrigger`、`wake`，`SpiderState` 用 `heading/headingTarget/headingTimer/wanderPhase/wanderSince/chaseSince` 取代原先的 `idleSince/targetX/targetY/waitMs`。
 

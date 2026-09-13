@@ -15,6 +15,8 @@ export type SpiderLegDefinition = {
   stride: number;
   tarsusBend: number;
   kneeBias: -1 | 1;
+  /** 波浪步态相位偏移（0~1），决定该腿在步态周期中何时抬脚 */
+  waveOffset: number;
 };
 
 export type SpiderLegPose = {
@@ -64,6 +66,20 @@ export type SpiderTuning = {
   stride: number;
   /** 朝向在单帧内变化超过该值（弧度）时，所有腿落点作废并重摆 */
   pivotAngle: number;
+  /** 高速自适应参考速度（px/s）：越快摆动越快、步幅越大、容许转动越大 */
+  gaitReference: number;
+  /** 摆动时长随速度的收缩增益 */
+  swingSpeedGain: number;
+  /** 步幅随速度的增长增益 */
+  strideSpeedGain: number;
+  /** 容许转动角随速度的增长增益 */
+  angleSpeedGain: number;
+  /** 自适应转身阈值上限（弧度） */
+  maxStepAngle: number;
+  /** 波浪步态一个周期对应的地面位移（px） */
+  waveStride: number;
+  /** 波浪步态中允许抬脚的时间窗口占比（0~1） */
+  waveWindow: number;
 };
 
 export const SPIDER_PAIR_LABELS = ["前足", "中前足", "中后足", "后足"] as const;
@@ -90,6 +106,13 @@ export const DEFAULT_SPIDER_TUNING: SpiderTuning = {
   swingDuration: 0.17,
   stride: 0.32,
   pivotAngle: 0.6,
+  gaitReference: 150,
+  swingSpeedGain: 0.6,
+  strideSpeedGain: 1,
+  angleSpeedGain: 1.1,
+  maxStepAngle: 2.6,
+  waveStride: 52,
+  waveWindow: 0.5,
 };
 
 function numberOr(value: unknown, fallback: number, minimum: number, maximum: number) {
@@ -130,6 +153,13 @@ export function normalizeSpiderTuning(value: unknown): SpiderTuning {
     swingDuration: numberOr(record.swingDuration, base.swingDuration, 0.03, 1.5),
     stride: numberOr(record.stride, base.stride, 0, 2),
     pivotAngle: numberOr(record.pivotAngle, base.pivotAngle, 0, Math.PI),
+    gaitReference: numberOr(record.gaitReference, base.gaitReference, 20, 800),
+    swingSpeedGain: numberOr(record.swingSpeedGain, base.swingSpeedGain, 0, 4),
+    strideSpeedGain: numberOr(record.strideSpeedGain, base.strideSpeedGain, 0, 4),
+    angleSpeedGain: numberOr(record.angleSpeedGain, base.angleSpeedGain, 0, 4),
+    maxStepAngle: numberOr(record.maxStepAngle, base.maxStepAngle, 0, Math.PI),
+    waveStride: numberOr(record.waveStride, base.waveStride, 5, 400),
+    waveWindow: numberOr(record.waveWindow, base.waveWindow, 0.05, 1),
   };
 }
 
@@ -186,6 +216,7 @@ function fillLegs(tuning: SpiderTuning) {
         stride: source.stride,
         tarsusBend: source.tarsusBend,
         kneeBias: (side * source.kneeFlip) as -1 | 1,
+        waveOffset: (pair * 0.25 + (side < 0 ? 0 : 0.5)) % 1,
       };
       if (SPIDER_LEGS[index]) Object.assign(SPIDER_LEGS[index], values);
       else SPIDER_LEGS.push(values);

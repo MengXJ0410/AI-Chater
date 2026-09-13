@@ -277,6 +277,50 @@ describe("spider state machine", () => {
     expect(state.status).toBe("wander");
   });
 
+  it("turns away from a boundary instead of sticking to it", () => {
+    const rightWall = viewport.width - SPIDER_BODY_RADIUS - SPIDER_EDGE_PADDING;
+    let state: SpiderState = {
+      ...createSpiderState(viewport),
+      status: "wander",
+      x: rightWall,
+      y: 400,
+      heading: 0,
+      headingTarget: 0,
+      headingTimer: 100000,
+    };
+    for (let frame = 0; frame < 60; frame += 1) {
+      state = stepSpider(state, { ...base });
+    }
+    expect(state.x).toBeLessThan(rightWall - 10);
+
+    let bottom: SpiderState = {
+      ...createSpiderState(viewport),
+      status: "wander",
+      x: 700,
+      y: groundY(viewport),
+      heading: Math.PI / 2,
+      headingTarget: Math.PI / 2,
+      headingTimer: 100000,
+    };
+    for (let frame = 0; frame < 60; frame += 1) {
+      bottom = stepSpider(bottom, { ...base });
+    }
+    expect(bottom.y).toBeLessThan(groundY(viewport) - 10);
+  });
+
+  it("flails the legs smoothly while dragging without per-frame randomness", () => {
+    const start: SpiderState = { ...createSpiderState(viewport), x: 400, y: 300 };
+    const first = stepSpider(start, { ...base, pointer: { x: 400, y: 300 }, dragging: true, random: () => 0.1 });
+    const second = stepSpider(start, { ...base, pointer: { x: 400, y: 300 }, dragging: true, random: () => 0.9 });
+    expect(first.legs).toEqual(second.legs);
+
+    const next = stepSpider(first, { ...base, pointer: { x: 400, y: 300 }, dragging: true, random: () => 0.1 });
+    first.legs.forEach((leg, index) => {
+      const moved = Math.hypot(next.legs[index].footX - leg.footX, next.legs[index].footY - leg.footY);
+      expect(moved).toBeLessThan(20);
+    });
+  });
+
   it("keeps each planted stance foot fixed while the body travels", () => {
     const arena = { width: 4000, height: 3000 };
     const heading = Math.atan2(2800, 3600);
@@ -323,5 +367,36 @@ describe("spider state machine", () => {
       });
     }
     expect(swung.size).toBe(8);
+  });
+
+  it("keeps a high stance duty at chase speed (crawling, not squirming)", () => {
+    const arena = { width: 6000, height: 900 };
+    let state: SpiderState = { ...createSpiderState(arena), status: "chase", x: 200, y: 450, vx: 0, vy: 0, heading: 0, chaseSince: 0 };
+    const pointer = { x: 9000, y: 450 };
+    let planted = 0;
+    let frames = 0;
+    for (let frame = 0; frame < 180; frame += 1) {
+      state = stepSpider(state, { ...base, viewport: arena, pointer, chaseCursor: true });
+      if (state.status !== "chase") break;
+      if (frame > 10) {
+        planted += state.legs.filter((leg) => leg.planted).length;
+        frames += 1;
+      }
+    }
+    expect(Math.hypot(state.vx, state.vy)).toBeGreaterThan(250);
+    expect(planted / (frames * 8)).toBeGreaterThan(0.5);
+  });
+
+  it("lifts the legs in a coordinated wave instead of all at once", () => {
+    const arena = { width: 6000, height: 900 };
+    let state: SpiderState = { ...createSpiderState(arena), status: "chase", x: 200, y: 450, vx: 0, vy: 0, heading: 0, chaseSince: 0 };
+    const pointer = { x: 9000, y: 450 };
+    let maxSwing = 0;
+    for (let frame = 0; frame < 180; frame += 1) {
+      state = stepSpider(state, { ...base, viewport: arena, pointer, chaseCursor: true });
+      if (state.status !== "chase") break;
+      if (frame > 15) maxSwing = Math.max(maxSwing, state.legs.filter((leg) => !leg.planted).length);
+    }
+    expect(maxSwing).toBeLessThanOrEqual(6);
   });
 });
