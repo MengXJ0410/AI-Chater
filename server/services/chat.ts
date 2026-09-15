@@ -15,6 +15,23 @@ export type ChatTurnInput = {
   attachmentIds: string[];
 };
 
+export async function loadConversationModelMessages(conversationId: string) {
+  const history = await getDb().select().from(messages)
+    .where(eq(messages.conversationId, conversationId));
+  const historyMessageIds = history.map((message) => message.id);
+  const historyAttachments = historyMessageIds.length
+    ? await getDb().select().from(attachments).where(inArray(attachments.messageId, historyMessageIds))
+    : [];
+  const storageKeys = new Map(historyAttachments.map((attachment) => [attachment.id, attachment.storageKey]));
+  const mimeTypes = new Map(historyAttachments.map((attachment) => [attachment.id, attachment.mimeType]));
+  return toModelMessages(history.map((message) => ({
+    role: message.role,
+    parts: message.parts,
+    storageKeys,
+    mimeTypes,
+  })));
+}
+
 export async function streamChatReply(input: ChatTurnInput, signal: AbortSignal) {
   const { userId, conversationId, presetId, text, attachmentIds } = input;
   const conversation = await getDb().select().from(conversations)
@@ -60,20 +77,7 @@ export async function streamChatReply(input: ChatTurnInput, signal: AbortSignal)
     }
   });
 
-  const history = await getDb().select().from(messages)
-    .where(eq(messages.conversationId, conversationId));
-  const historyMessageIds = history.map((message) => message.id);
-  const historyAttachments = historyMessageIds.length
-    ? await getDb().select().from(attachments).where(inArray(attachments.messageId, historyMessageIds))
-    : [];
-  const storageKeys = new Map(historyAttachments.map((attachment) => [attachment.id, attachment.storageKey]));
-  const mimeTypes = new Map(historyAttachments.map((attachment) => [attachment.id, attachment.mimeType]));
-  const modelMessages = await toModelMessages(history.map((message) => ({
-    role: message.role,
-    parts: message.parts,
-    storageKeys,
-    mimeTypes,
-  })));
+  const modelMessages = await loadConversationModelMessages(conversationId);
 
   const result = streamText({
     model: getLanguageModel(connection),

@@ -146,3 +146,9 @@ export const videoConfigSchema = z.object({
   defaultWidth: z.number().int().min(256).max(1024).default(576), defaultHeight: z.number().int().min(256).max(1024).default(320),
   defaultFrames: z.number().int().min(17).max(97).default(49), defaultFps: z.number().int().min(4).max(24).default(8), defaultSteps: z.number().int().min(8).max(40).default(20),
 }).strict();
+
+export const agentRunSchema = z.object({
+  conversationId: z.string().uuid(),
+  presetId: z.string().min(1).max(120),
+  text: z.string().trim().min(1, "请输入消息。").max(16000, "消息不能超过 16000 个字符。"),
+}).strict();

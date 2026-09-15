@@ -23,6 +23,7 @@
 
 - **账号认证**：开放注册、登录、退出；Argon2id 密码哈希 + Cookie 会话；修改密码与软删除账号（历史数据保留、用户名释放）。
 - **对话**：多会话、流式回复、图片输入、Markdown 渲染、模型预设切换、会话重命名/删除。
+- **Agent 工具链**：聊天工作台的 Agent 页，使用账号自己的加密对话配置驱动多步工具调用；内置 `current_time` 与 `calculate` 只读工具，前端展示执行步骤与工具调用时间线。
 - **用户模型配置**：多套加密配置（对话/生图），AES-256-GCM 保存 API Key，支持测试连接、审计与限流；兼容旧单条配置接口。
 - **生图**：异步数据库队列 + 单并发 worker，提示词/比例/清晰度/质量，结果网格与下载。
 - **视频**：本地 ComfyUI Wan 工作流（文生/图生/图文），可选 MiniMax-H3 提示词改写，异步任务轮询与取消。
@@ -68,6 +69,7 @@
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | POST | `/api/chat` | 流式对话（text stream） |
+| POST | `/api/agent/runs` | Agent 工具链运行（NDJSON：事件 + 文本增量） |
 | GET/POST | `/api/conversations` | 会话列表/新建 |
 | GET/PATCH/DELETE | `/api/conversations/:id` | 会话详情/重命名/删除 |
 
@@ -101,18 +103,18 @@ app/                    页面与 HTTP 接口层
   api/**/route.ts                             Route Handler
   layout.tsx  globals.css  page.tsx
 components/             前端组件（按功能域）
-  home/ auth/ chat/ image/ video/ companion/ profile/ appearance/
+  home/ auth/ chat/ image/ video/ companion/ profile/ appearance/ agent/ pet/
 client/                 前端能力层
-  api/                  typed fetch 客户端（auth/chat/conversations/uploads/presets/image/video/model-configs/profile/companion/http）
-  home/ image/ video/ appearance 等纯前端工具
+  api/                  typed fetch 客户端（auth/chat/agent/conversations/uploads/presets/image/video/model-configs/profile/companion/http）
+  home/ image/ video/ pet/ appearance 等纯前端工具
 shared/                 前后端共享（messages / validators / config / video）
 server/                 后端应用层
   http/                 RequestError、errorResponse、assertSameOrigin、routeError、Companion CORS
   security/             auth、account、api-key-crypto、url-safety、rate-limit、companion-auth
   db/                   Drizzle schema 与连接
   providers/            ai、ai-image、comfyui、minimax-h3
-  services/             会话/聊天/账号/配置/生图/视频/伴侣/上传/头像/首页背景/审计/测试
-  agent/                工具调用内核
+  services/             会话/聊天/Agent/账号/配置/生图/视频/伴侣/上传/头像/首页背景/审计/测试
+  agent/                工具调用内核与内置工具（current_time、calculate）
   config.ts             环境变量读取
 scripts/                image-worker.ts、video-worker.ts、部署脚本
 drizzle/                数据库 migration

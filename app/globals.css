@@ -4970,8 +4970,18 @@ body:has(.chat-app) .appearance-backdrop {
 
 :root[data-color-mode="dark"] .appearance-pet-chase { color: var(--text-muted); }
 :root[data-color-mode="dark"] .appearance-pet-toggle { color: var(--accent); }
-
 @media (prefers-reduced-motion: reduce) {
-  .spider-pet { transition: none; }
+  .spider-pet {
+    transition: none;
+  }
 }
 
+/* Agent tool-chain workspace */
+.agent-capabilities { display: flex; align-items: center; gap: 0.4rem; color: var(--text-muted); font-size: 0.74rem; }
+.agent-timeline { display: grid; gap: 0.4rem; margin: 0.9rem 0 0; padding: 0; list-style: none; max-height: 34vh; overflow-y: auto; }
+.agent-timeline-item { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; border: 1px solid color-mix(in srgb, var(--accent-border) 48%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--surface-input) 72%, transparent); padding: 0.42rem 0.6rem; color: var(--text-strong); font-size: 0.74rem; }
+.agent-timeline-item small { color: var(--text-faint); font-size: 0.66rem; }
+.agent-timeline-tool-started { border-left: 3px solid var(--accent); }
+.agent-timeline-tool-failed, .agent-timeline-agent-failed { border-color: color-mix(in srgb, var(--danger) 60%, transparent); color: var(--danger); }
+.agent-answer { margin-top: 1rem; border: 1px solid color-mix(in srgb, var(--accent-border) 48%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--surface-raised) 82%, transparent); padding: 0.9rem 1rem; color: var(--text-strong); overflow-wrap: anywhere; }
+.agent-answer .markdown { font-size: calc(var(--chat-font-scale) * 0.82rem); }

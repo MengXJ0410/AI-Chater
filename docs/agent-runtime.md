@@ -6,7 +6,7 @@
 
 v1 只实现模型驱动的多步工具调用、工具策略、取消、限额与脱敏生命周期事件。当前不包含真实生产工具、人工批准、任务持久化、RAG、记忆、MCP、队列或 Agent 工作台。
 
-生产注册表 `agentToolRegistry` 初始为空。后续能力必须作为显式注册工具接入，不能在 Runtime 内增加 Provider 或业务路由分支。
+生产注册表 `agentToolRegistry` 通过 `registerBuiltInAgentTools()` 注册内置只读工具（当前为 `current_time`、`calculate`）。后续能力必须作为显式注册工具接入，不能在 Runtime 内增加 Provider 或业务路由分支。
 
 ## 公共接口
 
@@ -77,3 +77,26 @@ const result = await runAgent({
 前端负责未来 Agent 工作台、运行状态展示和副作用批准交互。在批准协议落地前，不得注册或开放可写文件、发消息、发起交易等副作用能力。
 
 新增工具时需要补充注册、策略、输入输出校验、超时、取消、结果大小、脱敏失败和确定性模型循环测试。测试使用 `MockLanguageModelV4`，不得访问真实 Provider。
+
+## 生产工具与接入
+
+### 内置工具
+
+| 工具 | 能力 | 输入 | 说明 |
+| --- | --- | --- | --- |
+| `current_time` | 当前时间 | `timezone?`（IANA 时区） | 返回 ISO、本地化文本与 Unix 毫秒；非法时区按 `TOOL_INPUT_INVALID` 失败 |
+| `calculate` | 数学计算 | `expression`（≤200 字符） | 支持 `+ - * / % ^`、括号、`pi`/`e`、`sqrt/abs/round/floor/ceil/pow/min/max`，不使用 `eval` |
+
+两者均为 `read` 风险级别，超时 2 秒，结果远低于 64 KiB 上限。
+
+### 接口与调用链
+
+- `POST /api/agent/runs`：请求体 `{ conversationId, presetId, text }`（`agentRunSchema`），使用当前账号的加密对话配置调用 `streamAgent`。
+- 响应为 `application/x-ndjson` 分块，每行一个 `AgentStreamChunk`：`event`（脱敏生命周期事件）、`text`（文本增量）、`done`（步骤数与结束原因）、`error`（错误码与通用信息）。
+- 服务端在创建 run 前落库用户消息，完成后落库 assistant 文本消息并更新时间；整个过程沿用现有会话归属校验。
+- 前端经 `client/api/agent.ts` 的 `streamAgentRun` 消费，`components/agent/agent-workspace.tsx` 渲染模型选择、执行时间线与 Markdown 答案；入口位于聊天工作台的 Agent 工具页。
+
+### 边界
+
+- Agent 只允许使用显式注册且非 `side-effect` 的工具；当前批次全部为只读。
+- 事件只包含请求 ID、时间、步骤号、工具名、调用 ID、耗时、结果字节数与错误码，不含工具输入输出或上游正文。
